@@ -1,0 +1,32 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('sales_routes', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('sales_id')->constrained('sales')->onDelete('cascade');
+            $table->date('route_date');
+            $table->string('name');
+            $table->string('status')->default('planned'); // planned, in_progress, completed, cancelled
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('sales_routes');
+    }
+};
