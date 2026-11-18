@@ -1,61 +1,47 @@
-# SRS — Software Requirements Specification RuteSales
+# Software Requirements Specification (SRS) — RuteSales
 
-**Versi:** 1.0-draft
+## 1. Deskripsi Umum
+**RuteSales** adalah aplikasi berbasis web yang dirancang untuk distributor barang guna memantau, mengelola, dan mengevaluasi aktivitas kunjungan tim sales lapangan ke toko dan warung mitra secara terstruktur. Sistem mengintegrasikan penugasan rute harian multi-toko, pencatatan hasil check-in di lapangan, serta pemantauan pesanan dan kinerja melalui dashboard operasional.
 
-## 1. Tujuan
-Dokumen ini mendefinisikan perilaku yang harus dimiliki RuteSales agar anggota kelompok dan AI coding assistant membangun fitur dengan pemahaman yang sama.
+---
 
-## 2. Persyaratan fungsional
+## 2. Kebutuhan Fungsional (Functional Requirements)
 
-| ID | Persyaratan | Prioritas |
-|---|---|---|
-| FR-01 | Pengguna dapat login dan logout. | Must |
-| FR-02 | Sistem membatasi halaman berdasarkan role admin/sales. | Must |
-| FR-03 | Admin dapat membuat, melihat, mengubah, dan menonaktifkan data sales. | Must |
-| FR-04 | Admin dapat membuat, melihat, mengubah, dan menonaktifkan data toko. | Must |
-| FR-05 | Admin dapat membuat dan mengubah rute dengan sales, tanggal, nama, dan status. | Must |
-| FR-06 | Admin dapat menambahkan toko ke rute dan menentukan urutan kunjungan. | Must |
-| FR-07 | Sistem menyediakan detail rute dinamis berdasarkan ID. | Must |
-| FR-08 | Sales dapat melihat daftar kunjungan dari rute yang ditugaskan kepadanya. | Must |
-| FR-09 | Sales dapat mengirim hasil kunjungan dan catatan; waktu check-in berasal dari server. | Must |
-| FR-10 | Alasan wajib diisi jika hasil kunjungan `failed` atau `store_closed`. | Must |
-| FR-11 | Pesanan dapat dibuat untuk kunjungan berhasil yang valid; satu kunjungan maksimal satu pesanan pada MVP. | Must |
-| FR-12 | Dashboard menampilkan jumlah kunjungan, persentase berhasil, dan nilai pesanan berdasarkan database. | Must |
-| FR-13 | Input divalidasi di server dan kesalahan ditampilkan dengan jelas. | Must |
-| FR-14 | Daftar data panjang memakai pagination; relasi yang ditampilkan dimuat secara efisien. | Should |
-| FR-15 | Migration, factory, dan seeder tersedia untuk setup dan pengujian. | Must |
-| FR-16 | Admin dapat melihat rekap kunjungan dan pesanan berdasarkan periode. | Should |
-| FR-17 | Form yang mengubah data dilindungi CSRF. | Must |
-| FR-18 | Sistem mencegah toko yang sama ditambahkan dua kali ke satu rute. | Must |
+| ID | Kebutuhan Fungsional | PIC |
+| :--- | :--- | :--- |
+| **FR-01** | Pengguna dapat melakukan login dan logout dengan aman. | Arif |
+| **FR-02** | Sistem membatasi akses halaman dan aksi berdasarkan peran: **Admin** dan **Sales**. | Arif |
+| **FR-03** | Admin dapat mengelola (CRUD) profil Sales dan mengaktifkan/menonaktifkan statusnya. | Rofi |
+| **FR-04** | Admin dapat mengelola (CRUD) data Toko/Warung dan mengaktifkan/menonaktifkan statusnya. | Rofi |
+| **FR-05** | Admin dapat membuat rute penugasan baru dengan menentukan sales aktif, tanggal, dan nama rute. | Nana |
+| **FR-06** | Admin dapat menambahkan beberapa toko aktif ke dalam satu rute dan mengatur urutan kunjungan (`sequence`). | Nana |
+| **FR-07** | Sistem mencegah penambahan toko yang sama lebih dari satu kali dalam rute yang sama. | Nana |
+| **FR-08** | Sistem menyediakan halaman detail rute dinamis (`/rute/detail/{id}`) yang merender daftar toko berurutan. | Nana |
+| **FR-09** | Sales dapat melihat daftar penugasan pada halaman khusus **Kunjungan Saya** yang hanya memuat tugas miliknya. | Ammar |
+| **FR-10** | Sales dapat melakukan check-in dan mencatat hasil kunjungan (`successful`, `store_closed`, `failed`). | Ammar |
+| **FR-11** | Sistem mencatat waktu check-in (`checked_in_at`) berdasarkan waktu server (*server-time*). | Ammar |
+| **FR-12** | Sistem mewajibkan pengisian alasan kegagalan (`failure_reason`) jika hasil kunjungan `failed` atau `store_closed`. | Ammar |
+| **FR-13** | Pesanan hanya dapat dibuat untuk kunjungan dengan hasil `successful` (maksimal 1 pesanan per kunjungan pada MVP). | Ammar |
+| **FR-14** | Sales dicegah untuk mengakses atau mengubah rute/kunjungan milik sales lain (*data ownership protection*). | Ammar |
+| **FR-15** | Dashboard Admin menampilkan metrik ringkasan dari basis data: Total Kunjungan Selesai, Persentase Keberhasilan, dan Total Nilai Pesanan. | Arif |
+| **FR-16** | Dashboard menangani kondisi data kosong (*empty state*) tanpa memicu kesalahan pembagian dengan nol (*division by zero*). | Arif |
+| **FR-17** | Seluruh formulir yang memanipulasi data dilindungi token CSRF dan divalidasi di sisi server. | Semua |
+| **FR-18** | Sistem menyediakan laporan rekapitulasi data kunjungan dan transaksi dengan filter periode tanggal. | Arif |
 
-## 3. Aturan bisnis
-- Hanya admin yang dapat mengelola data master dan menyusun rute.
-- Sales hanya dapat melihat dan mengubah kunjungan yang dimiliki rute yang ditugaskan kepadanya.
-- Hanya sales aktif yang boleh ditugaskan ke rute baru.
-- Hanya toko aktif yang boleh ditambahkan ke rute baru.
-- Setiap item kunjungan pada rute memiliki urutan yang unik dalam rute tersebut.
-- Hasil kunjungan yang didukung: `successful`, `store_closed`, `failed`.
-- `store_closed` dan `failed` wajib mempunyai alasan/catatan yang menjelaskan.
-- Check-in dicatat menggunakan waktu server, bukan menerima waktu check-in bebas dari browser.
-- Pesanan hanya boleh dikaitkan dengan kunjungan `successful`.
-- Pada MVP, satu kunjungan menghasilkan maksimal satu pesanan.
-- Status dan enum disepakati di `DECISIONS.md`; jangan membuat variasi ejaan status antarfitur.
-- Nonaktifkan sales/toko yang telah mempunyai riwayat daripada menghapus secara permanen, kecuali ada keputusan lain.
+---
 
-## 4. Persyaratan nonfungsional
-- **Platform:** Laravel 11, PHP yang kompatibel, Blade.
-- **CSS:** Tailwind CSS atau Bootstrap; satu pilihan konsisten.
-- **Database:** SQLite atau MySQL.
-- **Keamanan:** hash password menggunakan mekanisme Laravel; CSRF; validasi server; otorisasi per role dan kepemilikan.
-- **Kegunaan:** label form jelas, status mudah dibedakan, layout responsif.
-- **Pemeliharaan:** MVC, nama file konsisten, reusable components, migration, seeder, dan README.
-- **Kinerja:** pagination dan eager loading saat relasi diperlukan untuk tabel/daftar.
-- **Keandalan:** dashboard menangani data kosong dan tidak membagi dengan nol.
+## 3. Aturan Bisnis (Business Rules)
+1. **Otorisasi Data:** Hanya Admin yang dapat mengelola data master dan membuat rute penugasan. Sales hanya berhak mencatat hasil kunjungan dan pesanan pada rute yang ditugaskan kepadanya.
+2. **Kondisi Data Master:** Hanya sales berstatus aktif dan toko berstatus aktif yang dapat dipilih saat membuat rute penugasan baru.
+3. **Integritas Rute:** Satu rute dapat memuat lebih dari satu toko yang disusun berdasarkan urutan kunjungan (`sequence`). Toko tidak boleh diduplikasi dalam rute yang sama.
+4. **Pencatatan Kunjungan:** Waktu check-in tidak boleh dimanipulasi oleh klien browser, melainkan otomatis dicatat menggunakan stempel waktu server saat formulir dikirim.
+5. **Keterkaitan Pesanan:** Pesanan tidak dapat dibuat apabila kunjungan berstatus gagal (`failed`) atau toko tutup (`store_closed`).
+6. **Preservasi Data:** Toko atau Sales yang telah memiliki riwayat penugasan/kunjungan tidak boleh dihapus secara permanen (*hard delete*), melainkan dialihkan statusnya menjadi nonaktif (*inactive*).
 
-## 5. Kriteria penerimaan global
-- Fresh setup sesuai README dapat menjalankan aplikasi.
-- Pengguna tanpa login tidak dapat membuka halaman internal.
-- Sales tidak dapat mengakses data milik sales lain dengan mengubah URL/ID.
-- Validasi mencegah data tidak valid tersimpan.
-- Semua alur utama dapat diuji dari UI.
-- Minimal 10 test case dijalankan, bukan hanya direncanakan.
+---
+
+## 4. Kebutuhan Non-Fungsional
+- **Teknologi:** PHP 8.2+, Laravel 11.x MVC, Blade Templating, Tailwind CSS, SQLite.
+- **Keamanan:** Hash password menggunakan Bcrypt/Argon2, proteksi CSRF di seluruh form POST/PUT/DELETE, sanitasi input untuk pencegahan XSS dan SQL Injection.
+- **Kinerja:** Penerapan *eager loading* Eloquent (`with`) untuk mencegah masalah N+1 query, serta pagination pada daftar data master dan rute.
+- **Kesesuaian Pengujian:** Dilengkapi minimal 25 skenario uji otomatis (*automated feature tests*) yang dapat dieksekusi melalui `php artisan test`.
