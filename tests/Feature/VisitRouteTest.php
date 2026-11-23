@@ -9,6 +9,8 @@ use App\Models\SalesRoute;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class VisitRouteTest extends TestCase
@@ -152,7 +154,10 @@ class VisitRouteTest extends TestCase
             'result' => 'successful',
             'total_amount' => 1500000,
             'notes' => 'Closing 10 kardus',
+            'photos' => [UploadedFile::fake()->image('bukti.jpg')],
         ];
+
+        Storage::fake('local');
 
         $response = $this->actingAs($this->salesUser)->post(route('my-visits.checkin', $visit->id), $payload);
 
@@ -160,6 +165,8 @@ class VisitRouteTest extends TestCase
         $visit->refresh();
         $this->assertEquals('successful', $visit->result);
         $this->assertNotNull($visit->checked_in_at);
+        $this->assertCount(1, $visit->photos);
+        Storage::disk('local')->assertExists($visit->photos->first()->path);
         $this->assertDatabaseHas('orders', [
             'route_visit_id' => $visit->id,
             'total_amount' => 1500000,
@@ -254,5 +261,97 @@ class VisitRouteTest extends TestCase
         $response = $this->actingAs($this->salesUser)->post(route('my-visits.checkin', $visit->id), $payload);
 
         $response->assertSessionHasErrors(['total_amount']);
+    }
+
+    /**
+     * Foto bukti wajib untuk semua hasil kunjungan (berhasil, toko tutup, ditolak).
+     */
+    public function test_checkin_without_photo_fails_for_every_result(): void
+    {
+        Storage::fake('local');
+
+        foreach (['successful', 'store_closed', 'failed'] as $i => $result) {
+            $route = SalesRoute::factory()->create(['sales_id' => $this->salesProfile->id]);
+            $visit = RouteVisit::create(['sales_route_id' => $route->id, 'store_id' => $this->store1->id, 'sequence' => 1]);
+
+            $payload = ['result' => $result, 'failure_reason' => 'Alasan uji'];
+
+            $response = $this->actingAs($this->salesUser)->post(route('my-visits.checkin', $visit->id), $payload);
+
+            $response->assertSessionHasErrors(['photos']);
+            $this->assertNull($visit->fresh()->checked_in_at);
+        }
+    }
+
+    /**
+     * Maksimal 3 foto per kunjungan.
+     */
+    public function test_checkin_with_more_than_three_photos_fails(): void
+    {
+        Storage::fake('local');
+        $route = SalesRoute::factory()->create(['sales_id' => $this->salesProfile->id]);
+        $visit = RouteVisit::create(['sales_route_id' => $route->id, 'store_id' => $this->store1->id, 'sequence' => 1]);
+
+        $payload = [
+            'result' => 'store_closed',
+            'failure_reason' => 'Rolling door tutup',
+            'photos' => [
+                UploadedFile::fake()->image('a.jpg'),
+                UploadedFile::fake()->image('b.jpg'),
+                UploadedFile::fake()->image('c.jpg'),
+                UploadedFile::fake()->image('d.jpg'),
+            ],
+        ];
+
+        $response = $this->actingAs($this->salesUser)->post(route('my-visits.checkin', $visit->id), $payload);
+
+        $response->assertSessionHasErrors(['photos']);
+    }
+
+    /**
+     * File non-gambar ditolak.
+     */
+    public function test_checkin_rejects_non_image_file(): void
+    {
+        Storage::fake('local');
+        $route = SalesRoute::factory()->create(['sales_id' => $this->salesProfile->id]);
+        $visit = RouteVisit::create(['sales_route_id' => $route->id, 'store_id' => $this->store1->id, 'sequence' => 1]);
+
+        $payload = [
+            'result' => 'failed',
+            'failure_reason' => 'Ditolak pemilik',
+            'photos' => [UploadedFile::fake()->create('dokumen.pdf', 100, 'application/pdf')],
+        ];
+
+        $response = $this->actingAs($this->salesUser)->post(route('my-visits.checkin', $visit->id), $payload);
+
+        $response->assertSessionHasErrors();
+        $this->assertNull($visit->fresh()->checked_in_at);
+    }
+
+    /**
+     * Foto private: pemilik dan admin boleh melihat, sales lain ditolak.
+     */
+    public function test_visit_photo_access_is_restricted_to_owner_and_admin(): void
+    {
+        Storage::fake('local');
+        $route = SalesRoute::factory()->create(['sales_id' => $this->salesProfile->id]);
+        $visit = RouteVisit::create(['sales_route_id' => $route->id, 'store_id' => $this->store1->id, 'sequence' => 1]);
+
+        $this->actingAs($this->salesUser)->post(route('my-visits.checkin', $visit->id), [
+            'result' => 'successful',
+            'total_amount' => 100000,
+            'photos' => [UploadedFile::fake()->image('bukti.jpg')],
+        ]);
+
+        $photo = $visit->fresh()->photos->first();
+        $this->assertNotNull($photo);
+
+        $this->actingAs($this->salesUser)->get(route('visit-photos.show', $photo->id))->assertOk();
+        $this->actingAs($this->admin)->get(route('visit-photos.show', $photo->id))->assertOk();
+
+        $otherUser = User::factory()->sales()->create(['name' => 'Sales Lain']);
+        Sales::factory()->create(['user_id' => $otherUser->id, 'name' => $otherUser->name]);
+        $this->actingAs($otherUser)->get(route('visit-photos.show', $photo->id))->assertStatus(403);
     }
 }

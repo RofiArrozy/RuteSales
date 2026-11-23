@@ -42,6 +42,7 @@
             font-family: 'Plus Jakarta Sans', sans-serif;
         }
     </style>
+    @stack('styles')
 </head>
 <body class="h-full antialiased text-slate-800" x-data="{ mobileMenuOpen: false }">
 
@@ -303,5 +304,6 @@
     </div>
 </div>
 
+@stack('scripts')
 </body>
 </html>

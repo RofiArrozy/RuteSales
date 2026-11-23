@@ -36,6 +36,19 @@
             </div>
         </div>
 
+        <!-- Peta Rute: titik kunjungan ini disorot -->
+        <x-route-map :visits="$visit->salesRoute->visits" :highlight="$visit->id" height="360px" />
+
+        @if($visit->store->latitude && $visit->store->longitude)
+            <div class="mb-6 -mt-4">
+                <a href="https://www.google.com/maps/dir/?api=1&destination={{ $visit->store->latitude }},{{ $visit->store->longitude }}&travelmode=driving"
+                   target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold shadow-xs transition-all">
+                    🧭 Navigasi ke toko ini (Google Maps)
+                </a>
+            </div>
+        @endif
+
         <!-- Form Check-in Transaksional (CSRF Protected & Server Time) -->
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8">
             <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-100">
@@ -48,7 +61,7 @@
                 </div>
             </div>
 
-            <form action="{{ route('my-visits.checkin', $visit->id) }}" method="POST" x-data="{
+            <form action="{{ route('my-visits.checkin', $visit->id) }}" method="POST" enctype="multipart/form-data" x-data="{
                 result: '{{ old('result', $visit->result ?? 'successful') }}',
                 orderAmount: '{{ old('total_amount', $visit->order->total_amount ?? '') }}'
             }">
@@ -124,6 +137,9 @@
                             <p class="text-xs text-rose-600 font-medium">{{ $message }}</p>
                         @enderror
                     </div>
+
+                    <!-- Foto Bukti Kunjungan (wajib 1-3 foto) -->
+                    <x-visit-photo-fields :visit="$visit" />
 
                     <!-- Catatan Tambahan -->
                     <div>

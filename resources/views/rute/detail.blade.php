@@ -57,6 +57,9 @@
         </div>
     </div>
 
+    <!-- Peta Rute (Leaflet + OSRM) -->
+    <x-route-map :visits="$r->visits" />
+
     <!-- Daftar Toko yang Harus Dikunjungi Berurutan (FR-06, FR-08, TC-11) -->
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8">
         <div class="p-5 border-b border-slate-100 flex items-center justify-between">
@@ -121,6 +124,7 @@
                                                 Catatan: "{{ $visitItem->notes }}"
                                             </div>
                                         @endif
+                                        <x-visit-photos :visit="$visitItem" />
                                     </div>
                                 @endif
                             </div>
@@ -138,7 +142,7 @@
 
                     <!-- Formulir Check-in Inline Terproteksi CSRF & Server-Time -->
                     <div x-show="showCheckinForm" x-cloak class="mt-5 pt-4 border-t border-slate-200/80 bg-slate-50/80 -mx-5 -mb-5 p-5 rounded-b-2xl">
-                        <form action="{{ route('rute.checkin', $visitItem->id) }}" method="POST" x-data="{ checkinResult: '{{ $visitItem->result ?? 'successful' }}' }">
+                        <form action="{{ route('rute.checkin', $visitItem->id) }}" method="POST" enctype="multipart/form-data" x-data="{ checkinResult: '{{ $visitItem->result ?? 'successful' }}' }">
                             @csrf
                             <h4 class="text-sm font-bold text-slate-800 mb-3">Formulir Check-in Lapangan (Waktu Server Otomatis)</h4>
 
@@ -177,6 +181,10 @@
                                            :required="checkinResult === 'store_closed' || checkinResult === 'failed'"
                                            class="w-full px-3 py-2 bg-white rounded-lg border border-rose-300 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500">
                                 </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <x-visit-photo-fields :visit="$visitItem" />
                             </div>
 
                             <div class="mb-4">

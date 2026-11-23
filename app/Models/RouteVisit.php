@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RouteVisit extends Model
@@ -62,6 +63,14 @@ class RouteVisit extends Model
     public function order(): HasOne
     {
         return $this->hasOne(Order::class);
+    }
+
+    /**
+     * Relasi ke foto bukti kunjungan (1 sampai 3 foto).
+     */
+    public function photos(): HasMany
+    {
+        return $this->hasMany(VisitPhoto::class, 'route_visit_id')->orderBy('id');
     }
 
     /**

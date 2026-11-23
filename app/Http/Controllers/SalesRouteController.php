@@ -135,7 +135,7 @@ class SalesRouteController extends Controller
      */
     public function show($id)
     {
-        $route = SalesRoute::with(['sales.user', 'visits.store', 'visits.order'])->findOrFail($id);
+        $route = SalesRoute::with(['sales.user', 'visits.store', 'visits.order', 'visits.photos'])->findOrFail($id);
 
         return view('rute.detail', compact('route'));
     }

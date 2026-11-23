@@ -76,6 +76,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/{id}/checkin', [RouteVisitController::class, 'checkin'])->name('checkin');
     });
 
+    // Foto bukti kunjungan (private, otorisasi dicek di controller)
+    Route::get('/visit-photos/{id}', [RouteVisitController::class, 'photo'])->name('visit-photos.show');
+
     // Alias & Form Check-In Fleksibel
     Route::post('/rute/checkin/{id}', [RouteVisitController::class, 'checkin'])->name('rute.checkin');
 

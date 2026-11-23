@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\RouteVisit;
 use App\Models\SalesRoute;
+use App\Models\VisitPhoto;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class RouteVisitController extends Controller
 {
@@ -56,7 +58,7 @@ class RouteVisitController extends Controller
      */
     public function show($id)
     {
-        $visit = RouteVisit::with(['salesRoute.sales.user', 'store', 'order'])->findOrFail($id);
+        $visit = RouteVisit::with(['salesRoute.sales.user', 'salesRoute.visits.store', 'store', 'order', 'photos'])->findOrFail($id);
 
         // Otorisasi kepemilikan data (TC-16): Sales hanya boleh melihat rute miliknya
         $user = Auth::user();
@@ -75,7 +77,7 @@ class RouteVisitController extends Controller
      */
     public function checkin(Request $request, $id)
     {
-        $visit = RouteVisit::with(['salesRoute.sales', 'store', 'order'])->findOrFail($id);
+        $visit = RouteVisit::with(['salesRoute.sales', 'store', 'order', 'photos'])->findOrFail($id);
 
         // Otorisasi kepemilikan data (TC-16)
         $user = Auth::user();
@@ -92,6 +94,11 @@ class RouteVisitController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
             'simulated_latitude' => ['nullable', 'numeric'],
             'simulated_longitude' => ['nullable', 'numeric'],
+            // Foto bukti kunjungan (1-3 foto, jumlah akhir dicek di bawah bersama foto lama)
+            'photos' => ['nullable', 'array', 'max:3'],
+            'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'remove_photos' => ['nullable', 'array'],
+            'remove_photos.*' => ['integer'],
         ];
 
         // Validasi kegagalan / toko tutup wajib mengisi alasan (TC-14, TC-15)
@@ -110,6 +117,11 @@ class RouteVisitController extends Controller
             'failure_reason.min' => 'Alasan minimal 3 karakter.',
             'total_amount.numeric' => 'Nilai pesanan harus berupa angka yang valid.',
             'total_amount.min' => 'Nilai pesanan tidak boleh bernilai negatif.',
+            'photos.max' => 'Maksimal 3 foto bukti per kunjungan.',
+            'photos.*.image' => 'Bukti harus berupa file gambar.',
+            'photos.*.mimes' => 'Foto harus berformat JPG, PNG, atau WebP.',
+            'photos.*.max' => 'Ukuran setiap foto maksimal 5 MB.',
+            'photos.*.uploaded' => 'Foto gagal diunggah. Ukuran file mungkin melebihi batas server.',
         ];
 
         $validated = $request->validate($rules, $messages);
@@ -119,7 +131,35 @@ class RouteVisitController extends Controller
             return back()->withErrors(['total_amount' => 'Pesanan hanya dapat dicatat jika hasil kunjungan berhasil (successful).'])->withInput();
         }
 
-        DB::transaction(function () use ($visit, $request, $validated) {
+        // Foto bukti wajib: minimal 1, maksimal 3 foto (foto lama yang tidak dihapus ikut dihitung)
+        $removeIds = collect($request->input('remove_photos', []))->map(fn ($v) => (int) $v)->all();
+        $photosToRemove = $visit->photos->whereIn('id', $removeIds);
+        $remainingCount = $visit->photos->count() - $photosToRemove->count();
+        $uploads = array_values(array_filter($request->file('photos', [])));
+        $totalPhotos = $remainingCount + count($uploads);
+
+        if ($totalPhotos < 1) {
+            return back()->withErrors(['photos' => 'Foto bukti wajib diunggah minimal 1 foto (berhasil, toko tutup, maupun ditolak).'])->withInput();
+        }
+        if ($totalPhotos > 3) {
+            return back()->withErrors(['photos' => 'Maksimal 3 foto bukti per kunjungan. Hapus foto lama atau kurangi unggahan.'])->withInput();
+        }
+
+        // Simpan file ke disk private lebih dulu; jika transaksi gagal, file dibersihkan kembali
+        $storedPaths = [];
+        try {
+            foreach ($uploads as $file) {
+                $storedPaths[] = $file->store("visit-photos/{$visit->id}", 'local');
+            }
+
+        DB::transaction(function () use ($visit, $request, $validated, $storedPaths, $photosToRemove) {
+            foreach ($storedPaths as $path) {
+                VisitPhoto::create(['route_visit_id' => $visit->id, 'path' => $path]);
+            }
+            foreach ($photosToRemove as $old) {
+                $old->delete();
+            }
+
             // Catat check-in dengan waktu server (FR-11, TC-13)
             $visit->update([
                 'result' => $validated['result'],
@@ -162,6 +202,17 @@ class RouteVisitController extends Controller
                 $route->update(['status' => 'in_progress']);
             }
         });
+        } catch (\Throwable $e) {
+            foreach ($storedPaths as $path) {
+                Storage::disk('local')->delete($path);
+            }
+            throw $e;
+        }
+
+        // Transaksi sukses: hapus file fisik dari foto lama yang dihapus
+        foreach ($photosToRemove as $old) {
+            Storage::disk('local')->delete($old->path);
+        }
 
         $message = "Check-in kunjungan ke '{$visit->store->name}' berhasil dicatat dengan status {$visit->result}.";
         if ($visit->result === 'successful' && $visit->order) {
@@ -174,5 +225,27 @@ class RouteVisitController extends Controller
         }
 
         return redirect()->route('rute.detail', $visit->sales_route_id)->with('success', $message);
+    }
+
+    /**
+     * Tampilkan file foto bukti kunjungan (private, hanya admin atau sales pemilik kunjungan).
+     */
+    public function photo($id)
+    {
+        $photo = VisitPhoto::with('routeVisit.salesRoute.sales')->findOrFail($id);
+
+        $user = Auth::user();
+        if ($user && $user->isSales()) {
+            $ownerUserId = $photo->routeVisit->salesRoute->sales->user_id ?? null;
+            if ($ownerUserId !== $user->id) {
+                abort(403, 'Akses ditolak. Anda tidak berhak melihat foto kunjungan sales lain.');
+            }
+        }
+
+        abort_unless(Storage::disk('local')->exists($photo->path), 404);
+
+        return Storage::disk('local')->response($photo->path, null, [
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
     }
 }

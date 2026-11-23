@@ -80,28 +80,8 @@
                         @enderror
                     </div>
 
-                    <!-- Koordinat Lokasi Toko (Simulasi GPS) -->
-                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
-                        <p class="text-xs font-bold text-slate-800 mb-3 flex items-center gap-1.5">
-                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            </svg>
-                            Koordinat Toko (Simulasi Lokasi Peta)
-                        </p>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label for="latitude" class="block text-xs text-slate-500 mb-1">Latitude</label>
-                                <input type="text" name="latitude" id="latitude" value="{{ old('latitude', $store->latitude) }}"
-                                       class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-                            </div>
-                            <div>
-                                <label for="longitude" class="block text-xs text-slate-500 mb-1">Longitude</label>
-                                <input type="text" name="longitude" id="longitude" value="{{ old('longitude', $store->longitude) }}"
-                                       class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Lokasi Toko di Peta (geocoding dari alamat + pin yang bisa digeser) -->
+                    <x-store-location-picker :lat="old('latitude', $store->latitude)" :lng="old('longitude', $store->longitude)" />
 
                     <!-- Status Toko -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
