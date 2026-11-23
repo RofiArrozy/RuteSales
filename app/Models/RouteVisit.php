@@ -22,8 +22,11 @@ class RouteVisit extends Model
         'checked_in_at',
         'notes',
         'failure_reason',
+        'skip_reason',
         'simulated_latitude',
         'simulated_longitude',
+        'gps_accuracy_m',
+        'gps_distance_m',
     ];
 
     protected function casts(): array
@@ -33,6 +36,8 @@ class RouteVisit extends Model
             'simulated_latitude' => 'float',
             'simulated_longitude' => 'float',
             'sequence' => 'integer',
+            'gps_accuracy_m' => 'integer',
+            'gps_distance_m' => 'integer',
         ];
     }
 
@@ -71,6 +76,35 @@ class RouteVisit extends Model
     public function photos(): HasMany
     {
         return $this->hasMany(VisitPhoto::class, 'route_visit_id')->orderBy('id');
+    }
+
+    /**
+     * Relasi ke riwayat audit check-in.
+     */
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(VisitAuditLog::class, 'route_visit_id')->orderBy('id');
+    }
+
+    /**
+     * Status verifikasi lokasi check-in: unknown | near | far.
+     * "far" hanya jika jarak dikurangi akurasi GPS masih melebihi radius.
+     */
+    public function gpsStatus(): string
+    {
+        if (is_null($this->gps_distance_m)) {
+            return 'unknown';
+        }
+
+        $accuracy = $this->gps_accuracy_m ?? 0;
+
+        if ($accuracy > config('rutesales.gps_max_accuracy_m', 500)) {
+            return 'unknown';
+        }
+
+        $effectiveDistance = max(0, $this->gps_distance_m - $accuracy);
+
+        return $effectiveDistance > config('rutesales.gps_radius_m', 200) ? 'far' : 'near';
     }
 
     /**

@@ -17,7 +17,7 @@ class SalesRouteFactory extends Factory
     {
         return [
             'sales_id' => Sales::factory(),
-            'route_date' => fake()->date(),
+            'route_date' => now()->toDateString(),
             'name' => 'Rute ' . fake()->streetName(),
             'status' => 'planned',
             'notes' => fake()->optional()->sentence(),

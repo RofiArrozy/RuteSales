@@ -13,9 +13,11 @@
         </div>
 
         <div class="flex items-center gap-2">
+@env('local')
             <a href="{{ route('quick.login', $user->id) }}" class="px-3.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-semibold shadow-xs transition-all">
                 Masuk Sebagai Akun Ini
             </a>
+@endenv
             <a href="{{ route('sales.edit', $user->id) }}" class="px-3.5 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold shadow-xs transition-all">
                 Edit Profil
             </a>

@@ -79,9 +79,11 @@
                                 @endif
                             </td>
                             <td class="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+@env('local')
                                 <a href="{{ route('quick.login', $user->id) }}" title="Masuk sebagai akun ini" class="inline-flex px-2 py-1 text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors">
                                     Switch
                                 </a>
+@endenv
                                 <a href="{{ route('sales.show', $user->id) }}" class="inline-flex px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">
                                     Detail
                                 </a>

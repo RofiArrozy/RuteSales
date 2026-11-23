@@ -57,7 +57,7 @@
                 <label for="password" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Kata Sandi
                 </label>
-                <input type="password" name="password" id="password" value="password" required
+                <input type="password" name="password" id="password" value="{{ app()->environment('local') ? 'password' : '' }}" required
                        placeholder="••••••••"
                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
             </div>
@@ -67,7 +67,9 @@
                     <input type="checkbox" name="remember" class="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500">
                     <span class="text-slate-600">Ingat Saya</span>
                 </label>
+                @env('local')
                 <span class="text-slate-400">Password: <code class="text-slate-700 font-bold">password</code></span>
+                @endenv
             </div>
 
             <button type="submit" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md shadow-blue-500/25 transition-all mt-2">
@@ -75,6 +77,7 @@
             </button>
         </form>
 
+@env('local')
         <!-- Quick 1-Click Demo Login -->
         <div class="mt-6 pt-6 border-t border-slate-100">
             <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 text-center mb-3">
@@ -99,6 +102,7 @@
                 </a>
             </div>
         </div>
+@endenv
     </div>
 </div>
 

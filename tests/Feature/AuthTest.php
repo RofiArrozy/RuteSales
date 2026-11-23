@@ -52,6 +52,9 @@ class AuthTest extends TestCase
      */
     public function test_quick_login_and_logout_flow(): void
     {
+        // Login cepat hanya aktif di lingkungan lokal
+        $this->app->detectEnvironment(fn () => 'local');
+
         $admin = User::factory()->admin()->create();
 
         $loginResponse = $this->get(route('quick.login', $admin->id));
@@ -60,6 +63,19 @@ class AuthTest extends TestCase
 
         $logoutResponse = $this->post(route('logout'));
         $logoutResponse->assertRedirect(route('login'));
+        $this->assertGuest();
+    }
+
+    /**
+     * Login cepat tanpa password ditutup di luar lingkungan lokal.
+     */
+    public function test_quick_login_is_disabled_outside_local_environment(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+
+        $admin = User::factory()->admin()->create();
+
+        $this->get(route('quick.login', $admin->id))->assertNotFound();
         $this->assertGuest();
     }
 }

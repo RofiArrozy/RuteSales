@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\RouteVisit;
 use App\Models\SalesRoute;
+use App\Models\VisitAuditLog;
 use App\Models\VisitPhoto;
+use App\Support\Geo;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -88,12 +90,33 @@ class RouteVisitController extends Controller
             }
         }
 
+        $isSales = $user && $user->isSales();
+        $wasCheckedIn = $visit->isCheckedIn();
+
+        // Aturan tanggal: sales hanya boleh check-in pada tanggal rute (admin boleh mengoreksi kapan saja)
+        if ($isSales && $visit->salesRoute->route_date->toDateString() !== Carbon::now()->toDateString()) {
+            return back()->withErrors([
+                'checkin' => 'Check-in hanya dapat dilakukan pada tanggal rute (' . $visit->salesRoute->route_date->translatedFormat('d F Y') . ').',
+            ])->withInput();
+        }
+
+        // Aturan urutan: boleh melompat, tetapi wajib menulis alasan (hanya pada check-in pertama)
+        $skippedStops = collect();
+        if ($isSales && !$wasCheckedIn) {
+            $skippedStops = $visit->salesRoute->visits()
+                ->where('sequence', '<', $visit->sequence)
+                ->whereNull('checked_in_at')
+                ->get();
+        }
+        $requiresSkipReason = $skippedStops->isNotEmpty();
+
         // Aturan validasi input
         $rules = [
             'result' => ['required', 'in:successful,store_closed,failed'],
             'notes' => ['nullable', 'string', 'max:1000'],
-            'simulated_latitude' => ['nullable', 'numeric'],
-            'simulated_longitude' => ['nullable', 'numeric'],
+            'simulated_latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'simulated_longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'gps_accuracy' => ['nullable', 'numeric', 'min:0'],
             // Foto bukti kunjungan (1-3 foto, jumlah akhir dicek di bawah bersama foto lama)
             'photos' => ['nullable', 'array', 'max:3'],
             'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
@@ -110,7 +133,13 @@ class RouteVisitController extends Controller
             $rules['order_number'] = ['nullable', 'string', 'max:100'];
         }
 
+        if ($requiresSkipReason) {
+            $rules['skip_reason'] = ['required', 'string', 'min:3', 'max:500'];
+        }
+
         $messages = [
+            'skip_reason.required' => 'Anda melewati toko dengan urutan lebih awal. Alasan melompat urutan wajib diisi.',
+            'skip_reason.min' => 'Alasan melompat urutan minimal 3 karakter.',
             'result.required' => 'Hasil kunjungan wajib dipilih.',
             'result.in' => 'Hasil kunjungan harus berupa successful, store_closed, atau failed.',
             'failure_reason.required' => 'Alasan wajib diisi jika kunjungan gagal atau toko tutup.',
@@ -145,6 +174,38 @@ class RouteVisitController extends Controller
             return back()->withErrors(['photos' => 'Maksimal 3 foto bukti per kunjungan. Hapus foto lama atau kurangi unggahan.'])->withInput();
         }
 
+        // Verifikasi lokasi: hanya menjadi penanda untuk admin, tidak memblokir check-in.
+        // Pembacaan GPS pertama dipertahankan agar bukti awal tidak tertimpa pembaruan berikutnya.
+        $gpsAttrs = [];
+        if ($request->filled('simulated_latitude') && $request->filled('simulated_longitude') && is_null($visit->simulated_latitude)) {
+            $lat = (float) $request->input('simulated_latitude');
+            $lng = (float) $request->input('simulated_longitude');
+            $gpsAttrs = [
+                'simulated_latitude' => $lat,
+                'simulated_longitude' => $lng,
+                'gps_accuracy_m' => $request->filled('gps_accuracy') ? (int) round((float) $request->input('gps_accuracy')) : null,
+            ];
+            if ($visit->store && !is_null($visit->store->latitude) && !is_null($visit->store->longitude)) {
+                $gpsAttrs['gps_distance_m'] = (int) round(Geo::distanceMeters($lat, $lng, $visit->store->latitude, $visit->store->longitude));
+            }
+        }
+
+        // checked_in_at menyimpan waktu check-in PERTAMA; pembaruan berikutnya tidak menimpanya
+        $visitAttrs = array_merge([
+            'result' => $validated['result'],
+            'checked_in_at' => $visit->checked_in_at ?? Carbon::now(),
+            'notes' => $validated['notes'] ?? null,
+            'failure_reason' => in_array($validated['result'], ['store_closed', 'failed']) ? $validated['failure_reason'] : null,
+        ], $gpsAttrs, $requiresSkipReason ? ['skip_reason' => $validated['skip_reason']] : []);
+
+        // Kondisi sebelum perubahan, untuk riwayat audit
+        $before = [
+            'result' => $visit->result,
+            'notes' => $visit->notes,
+            'failure_reason' => $visit->failure_reason,
+            'total_amount' => $visit->order ? (float) $visit->order->total_amount : null,
+        ];
+
         // Simpan file ke disk private lebih dulu; jika transaksi gagal, file dibersihkan kembali
         $storedPaths = [];
         try {
@@ -152,7 +213,7 @@ class RouteVisitController extends Controller
                 $storedPaths[] = $file->store("visit-photos/{$visit->id}", 'local');
             }
 
-        DB::transaction(function () use ($visit, $request, $validated, $storedPaths, $photosToRemove) {
+        DB::transaction(function () use ($visit, $request, $validated, $storedPaths, $photosToRemove, $visitAttrs, $before, $wasCheckedIn, $user) {
             foreach ($storedPaths as $path) {
                 VisitPhoto::create(['route_visit_id' => $visit->id, 'path' => $path]);
             }
@@ -161,14 +222,7 @@ class RouteVisitController extends Controller
             }
 
             // Catat check-in dengan waktu server (FR-11, TC-13)
-            $visit->update([
-                'result' => $validated['result'],
-                'checked_in_at' => Carbon::now(),
-                'notes' => $validated['notes'] ?? null,
-                'failure_reason' => in_array($validated['result'], ['store_closed', 'failed']) ? $validated['failure_reason'] : null,
-                'simulated_latitude' => $request->input('simulated_latitude'),
-                'simulated_longitude' => $request->input('simulated_longitude'),
-            ]);
+            $visit->update($visitAttrs);
 
             // Jika kunjungan berhasil dan ada nilai pesanan (atau default 0 jika berhasil dicatat)
             if ($validated['result'] === 'successful') {
@@ -189,6 +243,39 @@ class RouteVisitController extends Controller
                 if ($visit->order) {
                     $visit->order->delete();
                 }
+            }
+
+            // Riwayat audit: siapa mengubah apa, kapan
+            $afterAmount = Order::where('route_visit_id', $visit->id)->value('total_amount');
+            $after = [
+                'result' => $visit->result,
+                'notes' => $visit->notes,
+                'failure_reason' => $visit->failure_reason,
+                'total_amount' => is_null($afterAmount) ? null : (float) $afterAmount,
+            ];
+            $diff = [];
+            foreach ($after as $field => $newValue) {
+                if ($before[$field] !== $newValue) {
+                    $diff[$field] = ['from' => $before[$field], 'to' => $newValue];
+                }
+            }
+            $photosAdded = count($storedPaths);
+            $photosRemoved = $photosToRemove->count();
+
+            if (!$wasCheckedIn) {
+                VisitAuditLog::create([
+                    'route_visit_id' => $visit->id,
+                    'user_id' => $user?->id,
+                    'action' => 'checkin_created',
+                    'payload' => ['result' => $after['result'], 'photos_added' => $photosAdded, 'skip_reason' => $visit->skip_reason],
+                ]);
+            } elseif ($diff || $photosAdded || $photosRemoved) {
+                VisitAuditLog::create([
+                    'route_visit_id' => $visit->id,
+                    'user_id' => $user?->id,
+                    'action' => 'checkin_updated',
+                    'payload' => ['changes' => $diff, 'photos_added' => $photosAdded, 'photos_removed' => $photosRemoved],
+                ]);
             }
 
             // Evaluasi status rute induk (planned -> in_progress / completed)

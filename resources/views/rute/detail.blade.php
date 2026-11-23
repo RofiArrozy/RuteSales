@@ -125,6 +125,7 @@
                                             </div>
                                         @endif
                                         <x-visit-photos :visit="$visitItem" />
+                                        <x-visit-review :visit="$visitItem" />
                                     </div>
                                 @endif
                             </div>

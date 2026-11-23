@@ -155,6 +155,7 @@
                         </div>
                     </div>
 
+@env('local')
                     <!-- Quick Switcher Buttons -->
                     <div class="mt-2.5 pt-2 border-t border-slate-700/60 flex items-center justify-between text-[11px] text-slate-300">
                         <span class="text-slate-400 text-[10px]">Pindah:</span>
@@ -164,6 +165,7 @@
                             <a href="{{ route('quick.login', 3) }}" title="Login Sales Siti" class="px-1.5 py-0.5 rounded bg-slate-700 hover:bg-emerald-600 text-white text-[10px] transition-colors">Siti</a>
                         </div>
                     </div>
+@endenv
                 </div>
             </div>
         </div>
@@ -205,12 +207,14 @@
                 <a href="{{ route('sales.index') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-200 hover:bg-slate-800">Master Sales</a>
                 <a href="{{ route('reports.index') }}" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-200 hover:bg-slate-800">Laporan Rekap</a>
             @endif
+@env('local')
             <div class="pt-2 border-t border-slate-800 flex items-center gap-2">
                 <span class="text-xs text-slate-400">Pindah Akun:</span>
                 <a href="{{ route('quick.login', 1) }}" class="text-xs bg-blue-600 px-2 py-1 rounded text-white font-medium">Admin</a>
                 <a href="{{ route('quick.login', 2) }}" class="text-xs bg-emerald-600 px-2 py-1 rounded text-white font-medium">Budi</a>
                 <a href="{{ route('quick.login', 3) }}" class="text-xs bg-emerald-600 px-2 py-1 rounded text-white font-medium">Siti</a>
             </div>
+@endenv
         </div>
     </header>
 
@@ -223,6 +227,7 @@
             </div>
             
             <div class="flex items-center gap-4">
+@env('local')
                 <!-- Role Switcher Quick Pill -->
                 <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600">
                     <span class="px-2 text-slate-400">Beralih Akun:</span>
@@ -230,6 +235,7 @@
                     <a href="{{ route('quick.login', 2) }}" class="px-2.5 py-1 rounded-lg {{ auth()->id() == 2 ? 'bg-blue-600 text-white shadow-xs' : 'hover:bg-white text-slate-700' }}">Sales Budi</a>
                     <a href="{{ route('quick.login', 3) }}" class="px-2.5 py-1 rounded-lg {{ auth()->id() == 3 ? 'bg-blue-600 text-white shadow-xs' : 'hover:bg-white text-slate-700' }}">Sales Siti</a>
                 </div>
+@endenv
 
                 @if(auth()->check())
                     <form action="{{ route('logout') }}" method="POST">

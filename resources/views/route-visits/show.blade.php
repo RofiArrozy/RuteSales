@@ -49,6 +49,24 @@
             </div>
         @endif
 
+        @php
+            $isSalesUser = auth()->user()?->isSales();
+            $wrongDay = $isSalesUser && $visit->salesRoute->route_date->toDateString() !== now()->toDateString();
+            $skippedStops = ($isSalesUser && !$visit->isCheckedIn())
+                ? $visit->salesRoute->visits->where('sequence', '<', $visit->sequence)->whereNull('checked_in_at')
+                : collect();
+        @endphp
+
+        @if($wrongDay)
+            <div class="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-800">
+                Rute ini dijadwalkan untuk <strong>{{ $visit->salesRoute->route_date->translatedFormat('d F Y') }}</strong>.
+                Check-in hanya dapat dilakukan pada tanggal rute.
+            </div>
+        @endif
+        @error('checkin')
+            <div class="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-800">{{ $message }}</div>
+        @enderror
+
         <!-- Form Check-in Transaksional (CSRF Protected & Server Time) -->
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8">
             <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-100">
@@ -138,6 +156,27 @@
                         @enderror
                     </div>
 
+                    @if($skippedStops->isNotEmpty())
+                        <!-- Alasan melompat urutan kunjungan -->
+                        <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+                            <h3 class="text-xs font-bold text-amber-900 uppercase tracking-wider">Anda melewati urutan kunjungan</h3>
+                            <p class="text-xs text-amber-800">
+                                Belum dikunjungi: {{ $skippedStops->map(fn ($v) => '#' . $v->sequence . ' ' . ($v->store->name ?? 'Toko'))->implode(', ') }}.
+                                Tulis alasan melompat ke toko ini.
+                            </p>
+                            <textarea name="skip_reason" rows="2" required
+                                      placeholder="Contoh: Toko #1 belum buka, saya kunjungi toko ini dulu..."
+                                      class="w-full px-3.5 py-2.5 rounded-xl border {{ $errors->has('skip_reason') ? 'border-rose-400' : 'border-amber-200' }} bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500">{{ old('skip_reason') }}</textarea>
+                            @error('skip_reason')
+                                <p class="text-xs text-rose-600 font-medium">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    @endif
+
+                    @if($isSalesUser)
+                        <x-gps-capture />
+                    @endif
+
                     <!-- Foto Bukti Kunjungan (wajib 1-3 foto) -->
                     <x-visit-photo-fields :visit="$visit" />
 
@@ -156,7 +195,7 @@
                         <a href="{{ route('my-visits.index') }}" class="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                             Batal
                         </a>
-                        <button type="submit" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all">
+                        <button type="submit" @if($wrongDay) disabled data-locked="1" @endif class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                             Simpan Hasil Check-in
                         </button>
                     </div>

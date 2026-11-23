@@ -60,6 +60,9 @@ class AuthController extends Controller
      */
     public function quickLogin($id)
     {
+        // Login tanpa password hanya untuk pengembangan lokal.
+        abort_unless(app()->environment('local'), 404);
+
         $user = User::findOrFail($id);
         Auth::login($user);
         request()->session()->regenerate();
