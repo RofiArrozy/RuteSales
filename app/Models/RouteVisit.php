@@ -79,6 +79,32 @@ class RouteVisit extends Model
     }
 
     /**
+     * Scope: check-in yang ditandai "jauh dari toko". Selaras dengan gpsStatus() === 'far'.
+     * (Memakai penjumlahan, bukan pengurangan, agar aman untuk kolom unsigned di MySQL.)
+     */
+    public function scopeFar($query)
+    {
+        $radius = (int) config('rutesales.gps_radius_m', 200);
+        $maxAccuracy = (int) config('rutesales.gps_max_accuracy_m', 500);
+
+        return $query->whereNotNull('gps_distance_m')
+            ->whereRaw('COALESCE(gps_accuracy_m, 0) <= ?', [$maxAccuracy])
+            ->whereRaw('gps_distance_m > ? + COALESCE(gps_accuracy_m, 0)', [$radius]);
+    }
+
+    /**
+     * Scope: kunjungan yang perlu ditinjau admin (lokasi jauh, melompat urutan, atau check-in diperbarui).
+     */
+    public function scopeFlagged($query)
+    {
+        return $query->where(function ($q) {
+            $q->far()
+                ->orWhereNotNull('skip_reason')
+                ->orWhereHas('auditLogs', fn ($a) => $a->where('action', 'checkin_updated'));
+        });
+    }
+
+    /**
      * Relasi ke riwayat audit check-in.
      */
     public function auditLogs(): HasMany

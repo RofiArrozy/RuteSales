@@ -61,6 +61,9 @@ class AuthTest extends TestCase
         $loginResponse->assertRedirect(route('dashboard'));
         $this->assertAuthenticatedAs($admin);
 
+        // Kembalikan env 'testing' agar middleware CSRF kembali dilewati pada request POST logout
+        $this->app->detectEnvironment(fn () => 'testing');
+
         $logoutResponse = $this->post(route('logout'));
         $logoutResponse->assertRedirect(route('login'));
         $this->assertGuest();

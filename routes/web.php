@@ -65,6 +65,7 @@ Route::middleware('auth')->group(function () {
 
         // Laporan Rekapitulasi Berdasarkan Periode
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::get('/reports/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
     });
 
     // ==========================================
