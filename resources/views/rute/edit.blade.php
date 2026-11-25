@@ -1,4 +1,8 @@
 <x-layout title="Edit Rute Kunjungan">
+    @php
+        $hasCheckins = $route->visits->whereNotNull('checked_in_at')->isNotEmpty();
+        $initialStops = old('stores') ?? $route->visits->sortBy('sequence')->pluck('store_id')->all();
+    @endphp
     <div class="max-w-2xl mx-auto">
         <div class="mb-6 flex items-center justify-between">
             <div>
@@ -6,12 +10,21 @@
                     &larr; Kembali ke Detail Rute
                 </a>
                 <h1 class="text-2xl font-bold text-slate-900">Edit Rute #{{ $route->id }}</h1>
-                <p class="text-sm text-slate-500 mt-1">Ubah nama rute, tanggal jadwal, atau status penyelesaian.</p>
+                <p class="text-sm text-slate-500 mt-1">Ubah nama rute, tanggal jadwal, urutan toko, atau status penyelesaian.</p>
             </div>
         </div>
 
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8">
-            <form action="{{ route('rute.update', $route->id) }}" method="POST">
+            <form action="{{ route('rute.update', $route->id) }}" method="POST" x-data="{
+                stops: {{ Js::from(collect($initialStops)->map(fn ($sid) => ['id' => (string) $sid])->values()) }},
+                addStop() { this.stops.push({ id: '' }); },
+                removeStop(i) { if (this.stops.length > 1) this.stops.splice(i, 1); },
+                move(i, d) {
+                    const j = i + d;
+                    if (j < 0 || j >= this.stops.length) return;
+                    [this.stops[i], this.stops[j]] = [this.stops[j], this.stops[i]];
+                }
+            }">
                 @csrf
                 @method('PUT')
 
@@ -55,6 +68,47 @@
                         @error('status')
                             <p class="text-xs text-rose-600 mt-1.5 font-medium">{{ $message }}</p>
                         @enderror
+                    </div>
+
+                    <!-- Daftar & Urutan Toko -->
+                    <div class="pt-4 border-t border-slate-100">
+                        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Urutan Toko</h3>
+                        @error('stores')
+                            <p class="text-xs text-rose-600 mt-1.5 font-medium">{{ $message }}</p>
+                        @enderror
+
+                        @if($hasCheckins)
+                            <p class="text-xs text-amber-600 mt-1 mb-3">Daftar toko dikunci karena rute ini sudah memiliki check-in.</p>
+                            <ol class="space-y-2">
+                                @foreach($route->visits->sortBy('sequence') as $v)
+                                    <li class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-sm">
+                                        <span class="w-7 h-7 rounded-lg bg-slate-400 text-white font-bold flex items-center justify-center text-xs">{{ $v->sequence }}</span>
+                                        <span class="text-slate-700">{{ $v->store->name ?? 'Toko dihapus' }}</span>
+                                    </li>
+                                @endforeach
+                            </ol>
+                        @else
+                            <div class="flex items-center justify-between mt-1 mb-3">
+                                <p class="text-xs text-slate-400">Ubah, tambah, hapus, atau geser urutan toko selama belum ada check-in.</p>
+                                <button type="button" @click="addStop()" class="px-3 py-1.5 text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg">+ Tambah Toko</button>
+                            </div>
+                            <div class="space-y-3">
+                                <template x-for="(stop, index) in stops" :key="index">
+                                    <div class="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                                        <div class="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs shrink-0" x-text="index + 1"></div>
+                                        <select name="stores[]" required x-model="stop.id" class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                            <option value="">-- Pilih Toko --</option>
+                                            @foreach($activeStores as $store)
+                                                <option value="{{ $store->id }}">{{ $store->name }} - {{ $store->owner_name }} ({{ $store->address }})</option>
+                                            @endforeach
+                                        </select>
+                                        <button type="button" @click="move(index, -1)" :disabled="index === 0" class="p-2 text-slate-400 hover:text-blue-600 disabled:opacity-30" title="Naik">&uarr;</button>
+                                        <button type="button" @click="move(index, 1)" :disabled="index === stops.length - 1" class="p-2 text-slate-400 hover:text-blue-600 disabled:opacity-30" title="Turun">&darr;</button>
+                                        <button type="button" @click="removeStop(index)" :disabled="stops.length <= 1" class="p-2 text-slate-400 hover:text-rose-600 disabled:opacity-30" title="Hapus">&times;</button>
+                                    </div>
+                                </template>
+                            </div>
+                        @endif
                     </div>
 
                     <!-- Catatan Agenda -->

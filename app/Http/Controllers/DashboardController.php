@@ -9,6 +9,7 @@ use App\Models\SalesRoute;
 use App\Models\Store;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -48,25 +49,37 @@ class DashboardController extends Controller
             ->limit(8)
             ->get();
 
-        // Ringkasan Performa Sales
-        $salesList = Sales::with(['routes.visits.order'])->get();
-        $salesPerformance = $salesList->map(function ($s) {
-            $visits = $s->routes->flatMap->visits;
-            $completed = $visits->whereNotNull('result');
-            $success = $visits->where('result', 'successful');
-            $revenue = $success->sum(function ($v) {
-                return $v->order ? (float) $v->order->total_amount : 0;
-            });
+        // Ringkasan Performa Sales: satu query agregat (bukan memuat semua data ke memori)
+        $salesPerformance = DB::table('sales')
+            ->leftJoin('sales_routes', 'sales_routes.sales_id', '=', 'sales.id')
+            ->leftJoin('route_visits', 'route_visits.sales_route_id', '=', 'sales_routes.id')
+            ->leftJoin('orders', function ($join) {
+                $join->on('orders.route_visit_id', '=', 'route_visits.id')
+                    ->where('route_visits.result', '=', 'successful');
+            })
+            ->groupBy('sales.id', 'sales.name')
+            ->orderBy('sales.id')
+            ->selectRaw('sales.id, sales.name,
+                COUNT(route_visits.id) AS total_visits,
+                COALESCE(SUM(CASE WHEN route_visits.result IS NOT NULL THEN 1 ELSE 0 END), 0) AS completed_visits,
+                COALESCE(SUM(CASE WHEN route_visits.result = \'successful\' THEN 1 ELSE 0 END), 0) AS success_visits,
+                COALESCE(SUM(orders.total_amount), 0) AS total_revenue')
+            ->get()
+            ->map(fn ($r) => (object) [
+                'id' => $r->id,
+                'name' => $r->name,
+                'total_visits' => (int) $r->total_visits,
+                'completed_visits' => (int) $r->completed_visits,
+                'success_visits' => (int) $r->success_visits,
+                'total_revenue' => (float) $r->total_revenue,
+            ]);
 
-            return (object) [
-                'id' => $s->id,
-                'name' => $s->name,
-                'total_visits' => $visits->count(),
-                'completed_visits' => $completed->count(),
-                'success_visits' => $success->count(),
-                'total_revenue' => $revenue,
-            ];
-        });
+        // Kunjungan yang perlu ditinjau admin bulan ini (lokasi jauh, lompat urutan, check-in diperbarui)
+        $monthStart = Carbon::now()->startOfMonth()->format('Y-m-d');
+        $flaggedCount = RouteVisit::flagged()
+            ->whereHas('salesRoute', fn ($q) => $q->whereDate('route_date', '>=', $monthStart)
+                ->whereDate('route_date', '<=', $today))
+            ->count();
 
         return view('dashboard.index', compact(
             'totalCompletedVisits',
@@ -80,7 +93,8 @@ class DashboardController extends Controller
             'totalPlannedVisits',
             'todayRoutesCount',
             'recentVisits',
-            'salesPerformance'
+            'salesPerformance',
+            'flaggedCount'
         ));
     }
 }

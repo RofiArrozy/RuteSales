@@ -72,7 +72,7 @@ class SalesRouteController extends Controller
     {
         $request->validate([
             'sales_id' => ['required', 'exists:sales,id'],
-            'route_date' => ['required', 'date'],
+            'route_date' => ['required', 'date', 'after_or_equal:today'],
             'name' => ['required', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'stores' => ['required', 'array', 'min:1'],
@@ -81,6 +81,7 @@ class SalesRouteController extends Controller
             'sales_id.required' => 'Tenaga sales wajib dipilih.',
             'sales_id.exists' => 'Sales yang dipilih tidak valid.',
             'route_date.required' => 'Tanggal rute wajib diisi.',
+            'route_date.after_or_equal' => 'Tanggal rute tidak boleh di masa lalu.',
             'name.required' => 'Nama rute kunjungan wajib diisi.',
             'stores.required' => 'Pilih minimal satu toko untuk dikunjungi.',
             'stores.min' => 'Pilih minimal satu toko untuk dikunjungi.',
@@ -155,26 +156,83 @@ class SalesRouteController extends Controller
     {
         $route = SalesRoute::with(['visits.store'])->findOrFail($id);
         $activeSales = Sales::active()->orderBy('name')->get();
-        $activeStores = Store::active()->orderBy('name')->get();
+
+        // Toko aktif + toko yang sudah ada di rute ini (walau kini nonaktif) agar pilihan tetap tampil
+        $currentStoreIds = $route->visits->pluck('store_id');
+        $activeStores = Store::where(fn ($q) => $q->where('status', 'active')->orWhereIn('id', $currentStoreIds))
+            ->orderBy('name')
+            ->get();
 
         return view('rute.edit', compact('route', 'activeSales', 'activeStores'));
     }
 
     /**
-     * Perbarui data rute kunjungan.
+     * Perbarui data rute kunjungan (termasuk daftar & urutan toko selama belum ada check-in).
      */
     public function update(Request $request, $id)
     {
-        $route = SalesRoute::findOrFail($id);
+        $route = SalesRoute::with('visits')->findOrFail($id);
 
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'route_date' => ['required', 'date'],
             'status' => ['required', 'in:planned,in_progress,completed,cancelled'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'stores' => ['nullable', 'array', 'min:1'],
+            'stores.*' => ['required', 'exists:stores,id'],
+        ], [
+            'stores.min' => 'Pilih minimal satu toko untuk dikunjungi.',
         ]);
 
-        $route->update($request->only(['name', 'route_date', 'status', 'notes']));
+        $hasCheckins = $route->visits->whereNotNull('checked_in_at')->isNotEmpty();
+        $storeIds = $request->has('stores') ? array_values($request->input('stores')) : null;
+
+        // Toko hanya boleh diubah selama belum ada check-in (data kunjungan tidak boleh hilang)
+        if ($storeIds !== null && $hasCheckins) {
+            return back()->withErrors(['stores' => 'Daftar toko tidak dapat diubah karena rute ini sudah memiliki check-in.'])->withInput();
+        }
+
+        // Tanggal baru tidak boleh di masa lalu (sales tidak akan bisa check-in)
+        $newDate = Carbon::parse($request->input('route_date'))->startOfDay();
+        if (!$newDate->isSameDay($route->route_date) && $newDate->lt(Carbon::today())) {
+            return back()->withErrors(['route_date' => 'Tanggal rute tidak boleh di masa lalu.'])->withInput();
+        }
+
+        // Rute hanya boleh "selesai" bila semua kunjungannya sudah punya hasil
+        if ($request->input('status') === 'completed' && $route->visits->whereNull('result')->isNotEmpty()) {
+            return back()->withErrors(['status' => 'Rute belum dapat diselesaikan: masih ada toko yang belum dikunjungi.'])->withInput();
+        }
+
+        if ($storeIds !== null) {
+            if (count($storeIds) !== count(array_unique($storeIds))) {
+                return back()->withErrors(['stores' => 'Terdapat toko duplikat pada rute ini. Setiap toko hanya boleh dikunjungi satu kali per rute.'])->withInput();
+            }
+
+            // Toko nonaktif ditolak, kecuali yang memang sudah ada di rute ini
+            $inactive = Store::whereIn('id', $storeIds)
+                ->where('status', 'inactive')
+                ->whereNotIn('id', $route->visits->pluck('store_id'))
+                ->count();
+            if ($inactive > 0) {
+                return back()->withErrors(['stores' => 'Salah satu atau lebih toko yang dipilih berstatus nonaktif. Hanya toko aktif yang dapat ditambahkan ke rute.'])->withInput();
+            }
+        }
+
+        DB::transaction(function () use ($route, $request, $storeIds) {
+            $route->update($request->only(['name', 'route_date', 'status', 'notes']));
+
+            if ($storeIds !== null) {
+                // Aman: belum ada check-in, jadi belum ada foto/pesanan/riwayat yang ikut terhapus
+                $route->visits()->delete();
+                foreach ($storeIds as $index => $storeId) {
+                    RouteVisit::create([
+                        'sales_route_id' => $route->id,
+                        'store_id' => $storeId,
+                        'sequence' => $index + 1,
+                    ]);
+                }
+            }
+        });
 
         return redirect()->route('rute.detail', $route->id)
             ->with('success', "Rute kunjungan '{$route->name}' berhasil diperbarui.");

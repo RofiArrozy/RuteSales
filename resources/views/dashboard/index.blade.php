@@ -214,6 +214,16 @@
                         </div>
                         <span class="text-sm font-bold text-slate-900">{{ $todayRoutesCount }}</span>
                     </div>
+
+                    <a href="{{ route('reports.index', ['flagged' => 1]) }}" class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-amber-50 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center font-bold text-xs">
+                                ⚠
+                            </div>
+                            <span class="text-sm font-medium text-slate-700">Perlu Ditinjau (bulan ini)</span>
+                        </div>
+                        <span class="text-sm font-bold {{ $flaggedCount > 0 ? 'text-amber-600' : 'text-slate-900' }}">{{ $flaggedCount }}</span>
+                    </a>
                 </div>
             </div>
 
