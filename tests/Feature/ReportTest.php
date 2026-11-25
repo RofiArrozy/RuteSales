@@ -88,8 +88,9 @@ class ReportTest extends TestCase
         $response = $this->actingAs($this->admin)->get(route('reports.index', $this->reportParams(['flagged' => 1])));
 
         $response->assertOk();
-        $response->assertSee('Toko Bermasalah Jauh');
-        $response->assertDontSee('Toko Bersih Aman');
+        // Nama toko juga muncul di dropdown filter, jadi periksa baris tabel (data view), bukan teks halaman.
+        $names = $response->viewData('visits')->map(fn ($v) => $v->store->name)->all();
+        $this->assertSame(['Toko Bermasalah Jauh'], $names);
     }
 
     /**
@@ -141,5 +142,72 @@ class ReportTest extends TestCase
     public function test_photo_thumbnail_returns_null_for_missing_file(): void
     {
         $this->assertNull(PhotoThumb::dataUri('visit-photos/tidak-ada.jpg'));
+    }
+
+    public function test_report_can_be_filtered_by_result_and_store(): void
+    {
+        $ok = $this->visit('Toko Berhasil', ['result' => 'successful']);
+        $this->visit('Toko Tutup', ['result' => 'store_closed']);
+        $this->visit('Toko Belum', ['result' => null, 'checked_in_at' => null]);
+
+        $names = fn ($r) => $r->viewData('visits')->map(fn ($v) => $v->store->name)->sort()->values()->all();
+
+        $this->assertSame(['Toko Tutup'], $names($this->actingAs($this->admin)->get(route('reports.index', $this->reportParams(['result' => 'store_closed'])))));
+        $this->assertSame(['Toko Belum'], $names($this->actingAs($this->admin)->get(route('reports.index', $this->reportParams(['result' => 'pending'])))));
+        $this->assertSame(['Toko Berhasil'], $names($this->actingAs($this->admin)->get(route('reports.index', $this->reportParams(['store_id' => $ok->store_id])))));
+        $this->assertCount(3, $this->actingAs($this->admin)->get(route('reports.index', $this->reportParams(['result' => 'bukan-hasil-valid'])))->viewData('visits'));
+    }
+
+    public function test_invalid_dates_fall_back_and_reversed_range_is_swapped(): void
+    {
+        $this->visit('Toko Hari Ini');
+
+        $r = $this->actingAs($this->admin)->get(route('reports.index', ['start_date' => 'bukan-tanggal', 'end_date' => '2999-99-99']));
+        $r->assertOk();
+
+        $r = $this->actingAs($this->admin)->get(route('reports.index', [
+            'start_date' => Carbon::now()->addDay()->toDateString(),
+            'end_date' => Carbon::now()->subDay()->toDateString(),
+        ]));
+        $this->assertCount(1, $r->viewData('visits'));
+    }
+
+    public function test_revenue_follows_the_result_filter(): void
+    {
+        $v = $this->visit('Toko Omzet', ['result' => 'successful']);
+        \App\Models\Order::create(['route_visit_id' => $v->id, 'order_number' => 'PO-1', 'total_amount' => 150000]);
+        $this->visit('Toko Tutup', ['result' => 'store_closed']);
+
+        $all = $this->actingAs($this->admin)->get(route('reports.index', $this->reportParams()))->viewData('totalRevenue');
+        $closed = $this->actingAs($this->admin)->get(route('reports.index', $this->reportParams(['result' => 'store_closed'])))->viewData('totalRevenue');
+
+        $this->assertEquals(150000, $all);
+        $this->assertEquals(0, $closed);
+    }
+
+    public function test_csv_export_has_bom_header_rows_and_respects_filters(): void
+    {
+        $this->visit('Toko Berhasil', ['result' => 'successful']);
+        $this->visit('Toko Tutup', ['result' => 'store_closed']);
+
+        $res = $this->actingAs($this->admin)->get(route('reports.csv', $this->reportParams(['result' => 'successful'])));
+        $res->assertOk();
+        $this->assertStringContainsString('.csv', $res->headers->get('content-disposition'));
+        $body = $res->streamedContent();
+
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $body);
+        $this->assertStringContainsString('"Tanggal Rute";"Waktu Check-in"', $body);
+        $this->assertStringContainsString('Toko Berhasil', $body);
+        $this->assertStringNotContainsString('Toko Tutup', $body);
+    }
+
+    public function test_csv_neutralizes_formula_injection_and_is_admin_only(): void
+    {
+        $this->assertSame("'=HYPERLINK(\"x\")", \App\Http\Controllers\ReportController::safeCell('=HYPERLINK("x")'));
+        $this->assertSame("'-1+1", \App\Http\Controllers\ReportController::safeCell('-1+1'));
+        $this->assertSame('Toko Biasa', \App\Http\Controllers\ReportController::safeCell('Toko Biasa'));
+        $this->assertSame(5, \App\Http\Controllers\ReportController::safeCell(5));
+
+        $this->actingAs(User::find($this->sales->user_id))->get(route('reports.csv', $this->reportParams()))->assertRedirect(route('my-visits.index'));
     }
 }

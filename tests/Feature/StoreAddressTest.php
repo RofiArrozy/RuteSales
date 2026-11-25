@@ -193,4 +193,24 @@ class StoreAddressTest extends TestCase
             ->assertSessionHasErrors('address');
         $this->assertDatabaseMissing('stores', ['name' => 'Toko Makamhaji']);
     }
+
+    public function test_structured_factory_state_and_seeder_produce_consistent_addresses(): void
+    {
+        $store = Store::factory()->structured()->create();
+        $this->assertTrue($store->hasStructuredAddress());
+        $this->assertNotNull(Wilayah::resolve($store->province_code, $store->regency_code, $store->district_code, $store->village_code));
+
+        $this->seed(\Database\Seeders\DatabaseSeeder::class);
+
+        $seeded = Store::whereNotNull('village_code')->get();
+        $this->assertGreaterThanOrEqual(6, $seeded->count());
+        foreach ($seeded as $s) {
+            $this->assertNotNull(
+                Wilayah::resolve($s->province_code, $s->regency_code, $s->district_code, $s->village_code),
+                "Wilayah toko seed {$s->name} tidak konsisten"
+            );
+            $this->assertStringContainsString($s->postal_code, $s->address);
+        }
+        $this->assertDatabaseHas('route_visits', ['clarification_response' => 'Pemilik menambah stok untuk acara hajatan akhir pekan.']);
+    }
 }

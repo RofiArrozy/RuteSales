@@ -32,6 +32,8 @@
     <div class="meta muted">
         Periode: {{ \Carbon\Carbon::parse($startDate)->translatedFormat('d M Y') }} - {{ \Carbon\Carbon::parse($endDate)->translatedFormat('d M Y') }}
         &nbsp;|&nbsp; Sales: {{ $salesName ?? 'Semua' }}
+        @if($storeName) &nbsp;|&nbsp; Toko: {{ $storeName }} @endif
+        @if($resultLabel) &nbsp;|&nbsp; Hasil: {{ $resultLabel }} @endif
         @if($flagged) &nbsp;|&nbsp; Hanya yang perlu ditinjau @endif
         &nbsp;|&nbsp; Dibuat: {{ $generatedAt->translatedFormat('d M Y, H:i') }}
     </div>

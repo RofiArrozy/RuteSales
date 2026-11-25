@@ -21,7 +21,7 @@
                        class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
 
-            <div class="sm:col-span-4">
+            <div class="sm:col-span-6">
                 <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Filter Tenaga Sales</label>
                 <select name="sales_id" class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">Semua Sales</option>
@@ -31,7 +31,28 @@
                 </select>
             </div>
 
-            <div class="sm:col-span-2">
+            <div class="sm:col-span-4">
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Toko / Warung</label>
+                <select name="store_id" class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Semua Toko</option>
+                    @foreach($allStores as $st)
+                        <option value="{{ $st->id }}" {{ $storeId == $st->id ? 'selected' : '' }}>{{ $st->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="sm:col-span-4">
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Hasil Kunjungan</label>
+                <select name="result" class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Semua Hasil</option>
+                    <option value="successful" {{ $result === 'successful' ? 'selected' : '' }}>Berhasil</option>
+                    <option value="store_closed" {{ $result === 'store_closed' ? 'selected' : '' }}>Toko tutup</option>
+                    <option value="failed" {{ $result === 'failed' ? 'selected' : '' }}>Gagal</option>
+                    <option value="pending" {{ $result === 'pending' ? 'selected' : '' }}>Belum check-in</option>
+                </select>
+            </div>
+
+            <div class="sm:col-span-4">
                 <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors">
                     Terapkan Filter
                 </button>
@@ -45,9 +66,13 @@
                 </label>
 
                 @php
-                    $pdfParams = ['start_date' => $startDate, 'end_date' => $endDate, 'sales_id' => $salesId, 'flagged' => $flagged ? 1 : null];
+                    $pdfParams = ['start_date' => $startDate, 'end_date' => $endDate, 'sales_id' => $salesId, 'store_id' => $storeId, 'result' => $result, 'flagged' => $flagged ? 1 : null];
                 @endphp
                 <div class="flex items-center gap-2">
+                    <a href="{{ route('reports.csv', array_filter($pdfParams, fn ($v) => $v !== null && $v !== '')) }}"
+                       class="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all">
+                        Unduh CSV
+                    </a>
                     <a href="{{ route('reports.pdf', array_filter($pdfParams, fn ($v) => $v !== null && $v !== '')) }}"
                        class="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-all">
                         Unduh PDF

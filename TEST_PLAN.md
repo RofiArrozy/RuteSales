@@ -34,3 +34,24 @@ Catat hasil nyata untuk setiap test: `Pass`, `Fail`, atau `Blocked`, beserta tan
 - Jalankan test otomatis dengan `php artisan test` jika tersedia.
 - Untuk uji manual, lengkapi kolom hasil aktual, tanggal, penguji, dan bukti screenshot.
 - Jalankan regresi setelah merge fitur.
+
+## Skenario tambahan hasil audit (otomatis, PHPUnit dan Node)
+| Kode | Area | Skenario | Ekspektasi |
+|---|---|---|---|
+| TC-26 | Auth | Akun nonaktif mencoba login | Ditolak; sesi aktif akun yang dinonaktifkan dihentikan |
+| TC-27 | Auth | 6 kali login gagal dalam semenit | Dibatasi (throttle) |
+| TC-28 | Rute | Hapus rute yang sudah punya check-in | Ditolak; status rute tidak berubah |
+| TC-29 | Rute | Ubah daftar toko setelah check-in pertama | Ditolak (daftar toko terkunci) |
+| TC-30 | Admin | Admin check-in atau mengubah check-in | HTTP 403 |
+| TC-31 | Klarifikasi | Admin meminta klarifikasi pada kunjungan sudah check-in | Tersimpan, sales melihat banner, tercatat di audit log |
+| TC-32 | Klarifikasi | Sales menjawab tanpa isi jawaban | Validasi gagal |
+| TC-33 | Klarifikasi | Sales menjawab pada tanggal lain saat klarifikasi terbuka | Diizinkan; tanpa klarifikasi tetap ditolak |
+| TC-34 | Alamat | Kecamatan tidak cocok dengan kelurahan yang dipilih | Validasi gagal |
+| TC-35 | Alamat | Nama wilayah tertempel di kolom jalan | Dibuang otomatis; alamat tidak ganda |
+| TC-36 | Alamat | Edit toko lama tanpa menyentuh alamat | Tersimpan; alamat lama dipertahankan |
+| TC-37 | Alamat (JS) | Pencarian koordinat: hasil di kota lain, hasil kosong, HTTP error | Hasil jauh dibuang, lanjut ke kueri berikutnya, error dilempar |
+| TC-38 | Laporan | Filter toko, hasil, dan tanggal tidak valid | Data sesuai filter; tanggal tidak valid kembali ke bawaan |
+| TC-39 | Laporan | Ekspor CSV | BOM UTF-8, header, filter dihormati, rumus dinetralkan, hanya admin |
+| TC-40 | Akses | Sales membuka foto atau kunjungan sales lain | HTTP 403 melalui Policy |
+
+Catatan: tes browser (dropdown berjenjang, pin peta, pencarian jalan) dijalankan manual dan lewat Chromium headless dengan layanan peta ditiru; Nominatim asli dan GPS ponsel diuji manual.

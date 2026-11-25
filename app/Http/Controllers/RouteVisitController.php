@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ClarifyVisitRequest;
 use App\Models\Order;
 use App\Models\RouteVisit;
 use App\Models\SalesRoute;
@@ -12,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -63,14 +65,8 @@ class RouteVisitController extends Controller
     {
         $visit = RouteVisit::with(['salesRoute.sales.user', 'salesRoute.visits.store', 'store', 'order', 'photos'])->findOrFail($id);
 
-        // Otorisasi kepemilikan data (TC-16): Sales hanya boleh melihat rute miliknya
-        $user = Auth::user();
-        if ($user && $user->isSales()) {
-            $salesOwnerUserId = $visit->salesRoute->sales->user_id ?? null;
-            if ($salesOwnerUserId !== $user->id) {
-                abort(403, 'Akses ditolak. Anda tidak berhak melihat atau mengakses kunjungan sales lain.');
-            }
-        }
+        // Otorisasi kepemilikan data (TC-16): lihat RouteVisitPolicy::view
+        Gate::authorize('view', $visit);
 
         return view('route-visits.show', compact('visit'));
     }
@@ -82,20 +78,10 @@ class RouteVisitController extends Controller
     {
         $visit = RouteVisit::with(['salesRoute.sales', 'store', 'order', 'photos'])->findOrFail($id);
 
-        // Otorisasi kepemilikan data (TC-16)
+        // Otorisasi (TC-16): hanya sales pemilik kunjungan. Admin hanya memantau dan dapat meminta
+        // klarifikasi (lihat requestClarification()). Aturannya ada di RouteVisitPolicy::checkin.
+        Gate::authorize('checkin', $visit);
         $user = Auth::user();
-        if ($user && $user->isSales()) {
-            $salesOwnerUserId = $visit->salesRoute->sales->user_id ?? null;
-            if ($salesOwnerUserId !== $user->id) {
-                abort(403, 'Akses ditolak. Anda tidak berwenang mencatat check-in pada kunjungan sales lain.');
-            }
-        }
-
-        // Admin hanya memantau: hasil check-in hanya boleh dicatat/diubah oleh sales pemilik kunjungan.
-        // Jika hasilnya perlu dipertanyakan, admin meminta klarifikasi (lihat requestClarification()).
-        if (!$user || !$user->isSales()) {
-            abort(403, 'Hanya sales pemilik kunjungan yang dapat mencatat atau mengubah check-in. Admin dapat meminta klarifikasi.');
-        }
 
         $isSales = true;
         $wasCheckedIn = $visit->isCheckedIn();
@@ -345,17 +331,12 @@ class RouteVisitController extends Controller
      * Admin meminta klarifikasi atas hasil check-in. Admin tidak mengubah hasilnya;
      * sales yang menjawab (dan memperbaiki bila perlu), seluruhnya tercatat di riwayat audit.
      */
-    public function requestClarification(Request $request, $id)
+    public function requestClarification(ClarifyVisitRequest $request, $id)
     {
         $visit = RouteVisit::with('salesRoute')->findOrFail($id);
+        Gate::authorize('requestClarification', $visit);
 
-        $data = $request->validate([
-            'clarification_note' => ['required', 'string', 'min:3', 'max:500'],
-        ], [
-            'clarification_note.required' => 'Tulis hal yang perlu diklarifikasi.',
-            'clarification_note.min' => 'Catatan klarifikasi minimal 3 karakter.',
-            'clarification_note.max' => 'Catatan klarifikasi maksimal 500 karakter.',
-        ]);
+        $data = $request->validated();
 
         if (!$visit->isCheckedIn()) {
             return back()->with('error', 'Klarifikasi hanya dapat diminta untuk kunjungan yang sudah di-check-in sales.');
@@ -393,13 +374,7 @@ class RouteVisitController extends Controller
     {
         $photo = VisitPhoto::with('routeVisit.salesRoute.sales')->findOrFail($id);
 
-        $user = Auth::user();
-        if ($user && $user->isSales()) {
-            $ownerUserId = $photo->routeVisit->salesRoute->sales->user_id ?? null;
-            if ($ownerUserId !== $user->id) {
-                abort(403, 'Akses ditolak. Anda tidak berhak melihat foto kunjungan sales lain.');
-            }
-        }
+        Gate::authorize('view', $photo);
 
         abort_unless(Storage::disk('local')->exists($photo->path), 404);
 

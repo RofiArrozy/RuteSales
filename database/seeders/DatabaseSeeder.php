@@ -7,6 +7,7 @@ use App\Models\RouteVisit;
 use App\Models\Sales;
 use App\Models\SalesRoute;
 use App\Models\Store;
+use App\Support\Wilayah;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -85,7 +86,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Toko Berkah Sejahtera',
                 'owner_name' => 'Haji Mansyur',
                 'phone' => '081211223344',
-                'address' => 'Jl. Malioboro No. 12, Danurejan, Kota Yogyakarta',
+                'street' => 'Jl. Malioboro No. 12', 'village_code' => '34.71.04.1001',
                 'area' => 'Yogyakarta Pusat',
                 'latitude' => -7.7925000,
                 'longitude' => 110.3658000,
@@ -95,7 +96,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Warung Kelontong Sumber Rejeki',
                 'owner_name' => 'Ibu Sri Wahyuni',
                 'phone' => '081322334455',
-                'address' => 'Jl. Kaliurang KM 5 No. 45, Caturtunggal, Depok, Sleman',
+                'street' => 'Jl. Kaliurang KM 5 No. 45', 'village_code' => '34.04.07.2001',
                 'area' => 'Sleman Timur',
                 'latitude' => -7.7582000,
                 'longitude' => 110.3812000,
@@ -105,7 +106,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Minimarket Barokah Abadi',
                 'owner_name' => 'Pak Joko Susilo',
                 'phone' => '081533445566',
-                'address' => 'Jl. Gejayan No. 88, Condongcatur, Sleman',
+                'street' => 'Jl. Gejayan No. 88', 'village_code' => '34.04.07.2003',
                 'area' => 'Sleman Timur',
                 'latitude' => -7.7691000,
                 'longitude' => 110.3923000,
@@ -115,7 +116,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Toko Sembako Makmur Jaya',
                 'owner_name' => 'Koh Hendra',
                 'phone' => '081744556677',
-                'address' => 'Jl. Kusumanegara No. 101, Umbulharjo, Kota Yogyakarta',
+                'street' => 'Jl. Kusumanegara No. 101', 'village_code' => '34.71.13.1002',
                 'area' => 'Yogyakarta Timur',
                 'latitude' => -7.8034000,
                 'longitude' => 110.3891000,
@@ -125,7 +126,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Warung Madura 24 Jam',
                 'owner_name' => 'Mas Subhan',
                 'phone' => '081855667788',
-                'address' => 'Jl. Bantul KM 4 No. 15, Sewon, Bantul',
+                'street' => 'Jl. Bantul KM 4 No. 15', 'village_code' => '34.02.15.2004',
                 'area' => 'Bantul Utara',
                 'latitude' => -7.8312000,
                 'longitude' => 110.3587000,
@@ -135,7 +136,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Toko Kelontong Podomoro (Tutup Sementara)',
                 'owner_name' => 'Pak Slamet',
                 'phone' => '081966778899',
-                'address' => 'Jl. Wonosari KM 7, Piyungan, Bantul',
+                'street' => 'Jl. Wonosari KM 7', 'village_code' => '34.02.14.2003',
                 'area' => 'Bantul Timur',
                 'latitude' => -7.8350000,
                 'longitude' => 110.4350000,
@@ -145,6 +146,16 @@ class DatabaseSeeder extends Seeder
 
         $stores = [];
         foreach ($storesData as $s) {
+            // Alamat disusun dari pilihan wilayah (sama seperti form toko) agar konsisten dan akurat.
+            $code = $s['village_code'];
+            $region = Wilayah::resolve(substr($code, 0, 2), substr($code, 0, 5), substr($code, 0, 8), $code);
+            $s += [
+                'province_code' => $region['province']['id'],
+                'regency_code' => $region['regency']['id'],
+                'district_code' => $region['district']['id'],
+                'postal_code' => $region['village']['postal_code'],
+                'address' => Wilayah::compose($s['street'], $region),
+            ];
             $stores[] = Store::firstOrCreate(['name' => $s['name']], $s);
         }
 
@@ -202,6 +213,13 @@ class DatabaseSeeder extends Seeder
             'notes' => 'Pemilik memesan kopi instan dan sabun cuci.',
             'simulated_latitude' => -7.7691000,
             'simulated_longitude' => 110.3923000,
+        ]);
+        // Contoh klarifikasi: admin bertanya, sales sudah menjawab.
+        $visit3->update([
+            'clarification_note' => 'Mohon konfirmasi: nilai pesanan terlihat besar untuk toko ini.',
+            'clarification_requested_at' => $yesterday->copy()->setTime(16, 0),
+            'clarification_response' => 'Pemilik menambah stok untuk acara hajatan akhir pekan.',
+            'clarification_answered_at' => $yesterday->copy()->setTime(17, 10),
         ]);
         Order::create([
             'route_visit_id' => $visit3->id,
