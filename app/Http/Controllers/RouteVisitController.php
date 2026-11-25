@@ -91,11 +91,19 @@ class RouteVisitController extends Controller
             }
         }
 
-        $isSales = $user && $user->isSales();
-        $wasCheckedIn = $visit->isCheckedIn();
+        // Admin hanya memantau: hasil check-in hanya boleh dicatat/diubah oleh sales pemilik kunjungan.
+        // Jika hasilnya perlu dipertanyakan, admin meminta klarifikasi (lihat requestClarification()).
+        if (!$user || !$user->isSales()) {
+            abort(403, 'Hanya sales pemilik kunjungan yang dapat mencatat atau mengubah check-in. Admin dapat meminta klarifikasi.');
+        }
 
-        // Aturan tanggal: sales hanya boleh check-in pada tanggal rute (admin boleh mengoreksi kapan saja)
-        if ($isSales && $visit->salesRoute->route_date->toDateString() !== Carbon::now()->toDateString()) {
+        $isSales = true;
+        $wasCheckedIn = $visit->isCheckedIn();
+        $answeringClarification = $visit->hasOpenClarification();
+
+        // Aturan tanggal: sales hanya boleh check-in pada tanggal rute.
+        // Pengecualian: menjawab permintaan klarifikasi admin boleh dilakukan di hari lain.
+        if (!$answeringClarification && $visit->salesRoute->route_date->toDateString() !== Carbon::now()->toDateString()) {
             return back()->withErrors([
                 'checkin' => 'Check-in hanya dapat dilakukan pada tanggal rute (' . $visit->salesRoute->route_date->translatedFormat('d F Y') . ').',
             ])->withInput();
@@ -141,9 +149,15 @@ class RouteVisitController extends Controller
             $rules['skip_reason'] = ['required', 'string', 'min:3', 'max:500'];
         }
 
+        if ($answeringClarification) {
+            $rules['clarification_response'] = ['required', 'string', 'min:3', 'max:500'];
+        }
+
         $messages = [
             'skip_reason.required' => 'Anda melewati toko dengan urutan lebih awal. Alasan melompat urutan wajib diisi.',
             'skip_reason.min' => 'Alasan melompat urutan minimal 3 karakter.',
+            'clarification_response.required' => 'Admin meminta klarifikasi. Tulis jawaban Anda terlebih dahulu.',
+            'clarification_response.min' => 'Jawaban klarifikasi minimal 3 karakter.',
             'result.required' => 'Hasil kunjungan wajib dipilih.',
             'result.in' => 'Hasil kunjungan harus berupa successful, store_closed, atau failed.',
             'failure_reason.required' => 'Alasan wajib diisi jika kunjungan gagal atau toko tutup.',
@@ -202,7 +216,10 @@ class RouteVisitController extends Controller
             'checked_in_at' => $visit->checked_in_at ?? Carbon::now(),
             'notes' => $validated['notes'] ?? null,
             'failure_reason' => in_array($validated['result'], ['store_closed', 'failed']) ? $validated['failure_reason'] : null,
-        ], $gpsAttrs, $requiresSkipReason ? ['skip_reason' => $validated['skip_reason']] : []);
+        ], $gpsAttrs, $requiresSkipReason ? ['skip_reason' => $validated['skip_reason']] : [], $answeringClarification ? [
+            'clarification_response' => $validated['clarification_response'],
+            'clarification_answered_at' => Carbon::now(),
+        ] : []);
 
         // Kondisi sebelum perubahan, untuk riwayat audit
         $before = [
@@ -219,7 +236,7 @@ class RouteVisitController extends Controller
                 $storedPaths[] = $file->store("visit-photos/{$visit->id}", 'local');
             }
 
-        DB::transaction(function () use ($visit, $request, $validated, $storedPaths, $photosToRemove, $visitAttrs, $before, $wasCheckedIn, $user) {
+        DB::transaction(function () use ($visit, $request, $validated, $storedPaths, $photosToRemove, $visitAttrs, $before, $wasCheckedIn, $user, $answeringClarification) {
             foreach ($storedPaths as $path) {
                 VisitPhoto::create(['route_visit_id' => $visit->id, 'path' => $path]);
             }
@@ -284,6 +301,15 @@ class RouteVisitController extends Controller
                 ]);
             }
 
+            if ($answeringClarification) {
+                VisitAuditLog::create([
+                    'route_visit_id' => $visit->id,
+                    'user_id' => $user?->id,
+                    'action' => 'clarification_answered',
+                    'payload' => ['response' => $validated['clarification_response']],
+                ]);
+            }
+
             // Evaluasi status rute induk (planned -> in_progress / completed)
             $route = $visit->salesRoute;
             $allVisitsCount = $route->visits()->count();
@@ -312,12 +338,52 @@ class RouteVisitController extends Controller
             $message .= ' Nilai pesanan: Rp ' . number_format($visit->order->total_amount, 0, ',', '.');
         }
 
-        // Redirect sesuai konteks (sales ke halaman kunjungan, atau rute detail)
-        if (Auth::user() && Auth::user()->isSales()) {
-            return redirect()->route('my-visits.index')->with('success', $message);
+        return redirect()->route('my-visits.index')->with('success', $message);
+    }
+
+    /**
+     * Admin meminta klarifikasi atas hasil check-in. Admin tidak mengubah hasilnya;
+     * sales yang menjawab (dan memperbaiki bila perlu), seluruhnya tercatat di riwayat audit.
+     */
+    public function requestClarification(Request $request, $id)
+    {
+        $visit = RouteVisit::with('salesRoute')->findOrFail($id);
+
+        $data = $request->validate([
+            'clarification_note' => ['required', 'string', 'min:3', 'max:500'],
+        ], [
+            'clarification_note.required' => 'Tulis hal yang perlu diklarifikasi.',
+            'clarification_note.min' => 'Catatan klarifikasi minimal 3 karakter.',
+            'clarification_note.max' => 'Catatan klarifikasi maksimal 500 karakter.',
+        ]);
+
+        if (!$visit->isCheckedIn()) {
+            return back()->with('error', 'Klarifikasi hanya dapat diminta untuk kunjungan yang sudah di-check-in sales.');
         }
 
-        return redirect()->route('rute.detail', $visit->sales_route_id)->with('success', $message);
+        if ($visit->hasOpenClarification()) {
+            return back()->with('error', 'Masih ada permintaan klarifikasi yang belum dijawab sales untuk kunjungan ini.');
+        }
+
+        DB::transaction(function () use ($visit, $data) {
+            $visit->update([
+                'clarification_note' => $data['clarification_note'],
+                'clarification_requested_at' => Carbon::now(),
+                'clarification_requested_by' => Auth::id(),
+                'clarification_response' => null,
+                'clarification_answered_at' => null,
+            ]);
+
+            VisitAuditLog::create([
+                'route_visit_id' => $visit->id,
+                'user_id' => Auth::id(),
+                'action' => 'clarification_requested',
+                'payload' => ['note' => $data['clarification_note']],
+            ]);
+        });
+
+        return redirect()->route('rute.detail', $visit->sales_route_id)
+            ->with('success', 'Permintaan klarifikasi dikirim ke sales. Hasil check-in tidak diubah.');
     }
 
     /**

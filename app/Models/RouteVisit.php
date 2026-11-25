@@ -27,6 +27,11 @@ class RouteVisit extends Model
         'simulated_longitude',
         'gps_accuracy_m',
         'gps_distance_m',
+        'clarification_note',
+        'clarification_requested_at',
+        'clarification_requested_by',
+        'clarification_response',
+        'clarification_answered_at',
     ];
 
     protected function casts(): array
@@ -38,6 +43,8 @@ class RouteVisit extends Model
             'sequence' => 'integer',
             'gps_accuracy_m' => 'integer',
             'gps_distance_m' => 'integer',
+            'clarification_requested_at' => 'datetime',
+            'clarification_answered_at' => 'datetime',
         ];
     }
 
@@ -100,8 +107,25 @@ class RouteVisit extends Model
         return $query->where(function ($q) {
             $q->far()
                 ->orWhereNotNull('skip_reason')
+                ->orWhereNotNull('clarification_requested_at')
                 ->orWhereHas('auditLogs', fn ($a) => $a->where('action', 'checkin_updated'));
         });
+    }
+
+    /**
+     * Apakah admin meminta klarifikasi yang belum dijawab sales?
+     */
+    public function hasOpenClarification(): bool
+    {
+        return !is_null($this->clarification_requested_at) && is_null($this->clarification_answered_at);
+    }
+
+    /**
+     * Scope: permintaan klarifikasi yang masih menunggu jawaban sales.
+     */
+    public function scopeOpenClarification($query)
+    {
+        return $query->whereNotNull('clarification_requested_at')->whereNull('clarification_answered_at');
     }
 
     /**

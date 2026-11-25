@@ -15,6 +15,12 @@ class Store extends Model
         'owner_name',
         'phone',
         'address',
+        'street',
+        'province_code',
+        'regency_code',
+        'district_code',
+        'village_code',
+        'postal_code',
         'area',
         'latitude',
         'longitude',
@@ -28,6 +34,14 @@ class Store extends Model
             'latitude' => 'float',
             'longitude' => 'float',
         ];
+    }
+
+    /**
+     * Apakah alamat toko sudah memakai pilihan wilayah terstruktur (bukan alamat teks lama)?
+     */
+    public function hasStructuredAddress(): bool
+    {
+        return filled($this->village_code);
     }
 
     /**

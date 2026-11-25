@@ -80,15 +80,31 @@ class VisitControlsTest extends TestCase
         $this->assertNull($visit->fresh()->checked_in_at);
     }
 
-    public function test_admin_can_checkin_on_any_date(): void
+    public function test_admin_cannot_checkin_or_change_results(): void
     {
-        $route = $this->makeRoute(Carbon::now()->subDays(3)->toDateString());
+        $route = $this->makeRoute(Carbon::now()->toDateString());
         $visit = $this->makeVisit($route, $this->store1, 1);
 
         $this->actingAs($this->admin)->post(route('rute.checkin', $visit->id), $this->payload())
-            ->assertSessionHasNoErrors();
+            ->assertForbidden();
+        $this->actingAs($this->admin)->post(route('my-visits.checkin', $visit->id), $this->payload())
+            ->assertForbidden();
 
-        $this->assertNotNull($visit->fresh()->checked_in_at);
+        $visit->refresh();
+        $this->assertNull($visit->checked_in_at);
+        $this->assertNull($visit->result);
+    }
+
+    public function test_admin_cannot_edit_an_existing_checkin(): void
+    {
+        $route = $this->makeRoute(Carbon::now()->toDateString());
+        $visit = $this->makeVisit($route, $this->store1, 1);
+        $this->actingAs($this->salesUser)->post(route('my-visits.checkin', $visit->id), $this->payload(['total_amount' => 100000]));
+
+        $this->actingAs($this->admin)->post(route('rute.checkin', $visit->id), $this->payload(['total_amount' => 999999]))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('orders', ['route_visit_id' => $visit->id, 'total_amount' => 100000]);
     }
 
     // ---------- Aturan urutan ----------

@@ -81,6 +81,9 @@
                                                 Belum Check-in
                                             </span>
                                         @endif
+                                        @if($visit->hasOpenClarification())
+                                            <span class="text-[11px] font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">Perlu klarifikasi</span>
+                                        @endif
                                     </div>
                                     <p class="text-xs text-slate-500 mt-0.5">
                                         📍 {{ $visit->store->address ?? '-' }}

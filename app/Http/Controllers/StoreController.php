@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreRequest;
 use App\Models\Store;
+use App\Support\Wilayah;
 use Illuminate\Http\Request;
 
 class StoreController extends Controller
@@ -55,7 +56,7 @@ class StoreController extends Controller
      */
     public function store(StoreRequest $request)
     {
-        $store = Store::create($request->validated());
+        $store = Store::create($this->payload($request));
 
         return redirect()->route('stores.index')
             ->with('success', "Data toko '{$store->name}' berhasil ditambahkan.");
@@ -89,7 +90,7 @@ class StoreController extends Controller
     public function update(StoreRequest $request, $id)
     {
         $store = Store::findOrFail($id);
-        $store->update($request->validated());
+        $store->update($this->payload($request));
 
         return redirect()->route('stores.index')
             ->with('success', "Data toko '{$store->name}' berhasil diperbarui.");
@@ -114,5 +115,28 @@ class StoreController extends Controller
 
         return redirect()->route('stores.index')
             ->with('success', "Toko '{$name}' berhasil dihapus dari sistem.");
+    }
+
+    /**
+     * Data siap simpan: susun alamat dari pilihan wilayah (divalidasi konsisten oleh StoreRequest).
+     * Toko lama yang tidak mengubah alamat dibiarkan memakai alamat teks lamanya.
+     */
+    private function payload(StoreRequest $request): array
+    {
+        $data = $request->validated();
+
+        if (filled($data['village_code'] ?? null)) {
+            $region = Wilayah::resolve($data['province_code'], $data['regency_code'], $data['district_code'], $data['village_code']);
+            $data['street'] = Wilayah::cleanStreet($data['street'], $region);
+            $data['address'] = Wilayah::compose($data['street'], $region);
+            $data['postal_code'] = $region['village']['postal_code'];
+            if (blank($data['area'] ?? null)) {
+                $data['area'] = $region['district']['name'];
+            }
+        } else {
+            unset($data['address'], $data['street'], $data['province_code'], $data['regency_code'], $data['district_code'], $data['village_code'], $data['postal_code']);
+        }
+
+        return $data;
     }
 }

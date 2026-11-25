@@ -51,7 +51,7 @@
 
         @php
             $isSalesUser = auth()->user()?->isSales();
-            $wrongDay = $isSalesUser && $visit->salesRoute->route_date->toDateString() !== now()->toDateString();
+            $wrongDay = $isSalesUser && !$visit->hasOpenClarification() && $visit->salesRoute->route_date->toDateString() !== now()->toDateString();
             $skippedStops = ($isSalesUser && !$visit->isCheckedIn())
                 ? $visit->salesRoute->visits->where('sequence', '<', $visit->sequence)->whereNull('checked_in_at')
                 : collect();
@@ -67,6 +67,26 @@
             <div class="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-800">{{ $message }}</div>
         @enderror
 
+        @if($visit->clarification_requested_at)
+            <div class="mb-6 p-4 rounded-xl border text-sm {{ $visit->hasOpenClarification() ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-slate-50 border-slate-200 text-slate-700' }}">
+                <div class="font-bold text-xs uppercase tracking-wider mb-1">
+                    {{ $visit->hasOpenClarification() ? 'Admin meminta klarifikasi' : 'Klarifikasi sudah dijawab' }}
+                </div>
+                <p>"{{ $visit->clarification_note }}"</p>
+                <p class="text-xs mt-1 opacity-70">Diminta {{ $visit->clarification_requested_at->translatedFormat('d M Y, H:i') }}</p>
+                @if($visit->clarification_answered_at)
+                    <p class="mt-2 text-xs"><strong>Jawaban Anda:</strong> {{ $visit->clarification_response }}</p>
+                @endif
+            </div>
+        @endif
+
+        @unless($isSalesUser)
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 text-sm text-slate-600">
+                Admin hanya dapat melihat hasil check-in. Hasil kunjungan dicatat dan diperbarui oleh sales pemilik rute.
+                Untuk mempertanyakan suatu hasil, gunakan tombol <strong>Minta Klarifikasi</strong> di
+                <a href="{{ route('rute.detail', $visit->sales_route_id) }}" class="text-blue-600 font-semibold hover:underline">halaman detail rute</a>.
+            </div>
+        @else
         <!-- Form Check-in Transaksional (CSRF Protected & Server Time) -->
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8">
             <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-100">
@@ -180,6 +200,19 @@
                     <!-- Foto Bukti Kunjungan (wajib 1-3 foto) -->
                     <x-visit-photo-fields :visit="$visit" />
 
+                    @if($visit->hasOpenClarification())
+                        <!-- Jawaban atas permintaan klarifikasi admin -->
+                        <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+                            <h3 class="text-xs font-bold text-amber-900 uppercase tracking-wider">Jawaban klarifikasi untuk admin <span class="text-rose-500">*</span></h3>
+                            <textarea name="clarification_response" rows="2" required
+                                      placeholder="Jelaskan atau perbaiki hasil check-in di atas bila perlu..."
+                                      class="w-full px-3.5 py-2.5 rounded-xl border {{ $errors->has('clarification_response') ? 'border-rose-400' : 'border-amber-200' }} bg-white text-sm focus:outline-none">{{ old('clarification_response') }}</textarea>
+                            @error('clarification_response')
+                                <p class="text-xs text-rose-600 font-medium">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    @endif
+
                     <!-- Catatan Tambahan -->
                     <div>
                         <label for="notes" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -202,5 +235,6 @@
                 </div>
             </form>
         </div>
+        @endunless
     </div>
 </x-layout>

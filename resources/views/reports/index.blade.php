@@ -41,7 +41,7 @@
                 <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
                     <input type="checkbox" name="flagged" value="1" {{ $flagged ? 'checked' : '' }} class="rounded border-slate-300">
                     Hanya tampilkan yang perlu ditinjau
-                    <span class="font-normal text-slate-400">(lokasi jauh, lompat urutan, atau check-in diperbarui)</span>
+                    <span class="font-normal text-slate-400">(lokasi jauh, lompat urutan, klarifikasi, atau check-in diperbarui)</span>
                 </label>
 
                 @php
@@ -173,6 +173,9 @@
                                         @endif
                                         @if($v->skip_reason)
                                             <span title="{{ $v->skip_reason }}" class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[11px] font-semibold border border-amber-200">Lompat urutan</span>
+                                        @endif
+                                        @if($v->clarification_requested_at)
+                                            <span title="{{ $v->clarification_note }}" class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-semibold border border-amber-300">{{ $v->hasOpenClarification() ? 'Menunggu klarifikasi' : 'Klarifikasi dijawab' }}</span>
                                         @endif
                                         @if($updateCount > 0)
                                             <span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-200">Diperbarui {{ $updateCount }}x</span>

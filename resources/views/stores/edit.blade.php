@@ -68,17 +68,8 @@
                         </div>
                     </div>
 
-                    <!-- Alamat Lengkap -->
-                    <div>
-                        <label for="address" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                            Alamat Lengkap Toko <span class="text-rose-500">*</span>
-                        </label>
-                        <textarea name="address" id="address" rows="3" required
-                                  class="w-full px-3.5 py-2.5 rounded-xl border {{ $errors->has('address') ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200' }} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">{{ old('address', $store->address) }}</textarea>
-                        @error('address')
-                            <p class="text-xs text-rose-600 mt-1.5 font-medium">{{ $message }}</p>
-                        @enderror
-                    </div>
+                    <!-- Alamat terstruktur (dropdown wilayah + jalan) -->
+                    <x-address-fields :store="$store" />
 
                     <!-- Lokasi Toko di Peta (geocoding dari alamat + pin yang bisa digeser) -->
                     <x-store-location-picker :lat="old('latitude', $store->latitude)" :lng="old('longitude', $store->longitude)" />

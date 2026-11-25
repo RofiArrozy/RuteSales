@@ -84,6 +84,9 @@
                             @if($v->skip_reason)
                                 <div class="tag tag-skip">Lompat urutan: {{ $v->skip_reason }}</div>
                             @endif
+                            @if($v->clarification_requested_at)
+                                <div class="tag tag-skip">{{ $v->hasOpenClarification() ? 'Menunggu klarifikasi' : 'Klarifikasi dijawab' }}</div>
+                            @endif
                             @if($updateCount > 0)
                                 <div class="tag tag-upd">Diperbarui {{ $updateCount }}x</div>
                             @endif

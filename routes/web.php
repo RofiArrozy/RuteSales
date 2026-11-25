@@ -61,6 +61,9 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::get('/{id}/edit', [SalesRouteController::class, 'edit'])->name('edit');
             Route::put('/{id}', [SalesRouteController::class, 'update'])->name('update');
             Route::delete('/{id}', [SalesRouteController::class, 'destroy'])->name('destroy');
+
+            // Admin meminta klarifikasi hasil check-in (admin tidak mengubah hasilnya)
+            Route::post('/visit/{id}/clarify', [RouteVisitController::class, 'requestClarification'])->name('clarify');
         });
 
         // Laporan Rekapitulasi Berdasarkan Periode

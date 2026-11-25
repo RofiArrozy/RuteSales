@@ -88,18 +88,20 @@ class AuditHardeningTest extends TestCase
         $this->assertSame('admin', $admin->role);
     }
 
-    public function test_route_with_checkin_is_cancelled_not_deleted(): void
+    public function test_route_with_checkin_cannot_be_deleted_and_status_is_unchanged(): void
     {
         $admin = User::factory()->admin()->create();
-        $route = SalesRoute::factory()->create(['status' => 'in_progress']);
+        $route = SalesRoute::factory()->create(['status' => 'completed']);
         RouteVisit::factory()->successful()->create([
             'sales_route_id' => $route->id,
             'checked_in_at' => now(),
         ]);
 
-        $this->actingAs($admin)->delete(route('rute.destroy', $route->id))->assertRedirect(route('rute.index'));
+        $this->actingAs($admin)->delete(route('rute.destroy', $route->id))
+            ->assertRedirect(route('rute.index'))
+            ->assertSessionHas('error');
 
-        $this->assertDatabaseHas('sales_routes', ['id' => $route->id, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('sales_routes', ['id' => $route->id, 'status' => 'completed']);
         $this->assertDatabaseCount('route_visits', 1);
     }
 

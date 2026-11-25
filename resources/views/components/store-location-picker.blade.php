@@ -12,7 +12,7 @@
     </div>
 
     <p id="geocode-status" class="text-xs text-slate-500 mb-3">
-        Isi alamat lalu klik tombol di atas. Geser pin atau klik peta untuk mengoreksi posisi.
+        Pilih wilayah dan tulis nama jalan; peta menuju wilayah itu otomatis. Klik tombol di atas untuk mencari titik jalannya, atau geser pin / klik peta untuk mengoreksi.
     </p>
 
     <div id="store-map" class="rounded-xl border border-slate-200" style="height: 320px; width: 100%; z-index: 0;"></div>
@@ -39,9 +39,8 @@
 
 @push('scripts')
     <script>
-        (function () {
-            const addrEl = document.getElementById('address');
-            const areaEl = document.getElementById('area');
+        // Leaflet dimuat oleh stack yang sama; tunggu halaman siap agar urutan <script> tidak berpengaruh.
+        document.addEventListener('DOMContentLoaded', function () {
             const latEl = document.getElementById('latitude');
             const lngEl = document.getElementById('longitude');
             const btn = document.getElementById('geocode-btn');
@@ -49,21 +48,25 @@
 
             const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
             const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            const ZOOM = { village: 16, district: 14, regency: 12, province: 8 };
 
-            // Penanda: jika admin sudah mengoreksi manual, pencarian otomatis tidak menimpanya.
+            // Jika admin sudah menggeser pin / mengisi koordinat sendiri, pencarian otomatis tidak menimpanya.
             let manual = false;
             let busy = false;
             let marker = null;
 
             const startLat = num(latEl.value), startLng = num(lngEl.value);
             const hasStart = startLat !== null && startLng !== null;
+            // Koordinat tersimpan/lama dianggap sudah dipilih admin: jangan ditimpa saat dropdown dimuat.
+            if (hasStart) manual = true;
 
             const map = L.map('store-map', { scrollWheelZoom: false })
-                .setView(hasStart ? [startLat, startLng] : [-7.3, 110.5], hasStart ? 16 : 7);
+                .setView(hasStart ? [startLat, startLng] : [-2.5, 118], hasStart ? 16 : 5);
             L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             }).addTo(map);
+            window.rsStoreMap = map;
 
             function writeInputs(lat, lng) {
                 latEl.value = lat.toFixed(7);
@@ -107,66 +110,58 @@
                 }
             }));
 
-            // Kandidat kueri: dari paling spesifik ke paling umum (alamat informal sering gagal ditemukan).
-            function buildQueries() {
-                const area = (areaEl?.value || '').trim();
-                const parts = addrEl.value.split(',').map((p) => p.trim()).filter(Boolean);
-                const list = [];
-                if (parts.length) {
-                    list.push([parts.join(', '), area].filter(Boolean).join(', '));
-                    list.push(parts.join(', '));
-                    for (let i = 1; i <= Math.min(2, parts.length - 1); i++) {
-                        list.push([parts.slice(i).join(', '), area].filter(Boolean).join(', '));
-                    }
-                    if (area) list.push(area);
-                }
-                return [...new Set(list.filter(Boolean))];
-            }
+            const state = () => (window.RuteSalesAddress && window.RuteSalesAddress.state) || null;
 
-            async function geocode() {
+            async function geocode(auto) {
                 if (busy) return;
-                if (!addrEl.value.trim()) { setStatus('Isi alamat toko terlebih dahulu.', 'warn'); return; }
-                busy = true; btn.disabled = true; btn.textContent = 'Mencari...';
-                setStatus('Mencari lokasi...', 'info');
+                const st = state();
+                if (!st || !st.parts.village) { setStatus('Pilih provinsi sampai kelurahan/desa terlebih dahulu.', 'warn'); return; }
+                if (!st.parts.street.trim()) { setStatus('Tulis nama jalan terlebih dahulu.', 'warn'); return; }
 
+                busy = true; btn.disabled = true; btn.textContent = 'Mencari...';
+                setStatus('Mencari lokasi jalan...', 'info');
                 try {
-                    const queries = buildQueries();
-                    for (let i = 0; i < queries.length; i++) {
-                        if (i > 0) await sleep(1100); // batas Nominatim: 1 permintaan/detik
-                        const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=id&accept-language=id&q=' + encodeURIComponent(queries[i]);
-                        const res = await fetch(url);
-                        if (!res.ok) throw new Error('HTTP ' + res.status);
-                        const data = await res.json();
-                        if (data.length) {
-                            manual = false;
-                            setPoint(parseFloat(data[0].lat), parseFloat(data[0].lon), i === 0 ? 17 : 15);
-                            setStatus(i === 0
-                                ? 'Lokasi ditemukan. Periksa pin, geser jika kurang tepat.'
-                                : 'Alamat persis tidak ditemukan. Pin hanya perkiraan area, geser ke lokasi toko yang benar.',
-                                i === 0 ? 'ok' : 'warn');
-                            return;
-                        }
+                    const hit = await window.RuteSalesAddress.geocodeAddress({
+                        parts: st.parts, center: st.center, fetchFn: (u) => fetch(u), sleep: sleep
+                    });
+                    if (hit) {
+                        manual = false;
+                        setPoint(hit.lat, hit.lng, hit.step === 0 ? 17 : 15);
+                        setStatus(hit.step === 0
+                            ? 'Lokasi jalan ditemukan. Periksa pin, geser jika kurang tepat.'
+                            : 'Nomor/jalan persisnya tidak ada di peta. Pin hanya perkiraan sekitar jalan itu, geser ke lokasi toko.',
+                            hit.step === 0 ? 'ok' : 'warn');
+                    } else {
+                        setStatus('Jalan tidak ditemukan di peta. Pin tetap di pusat kelurahan; geser ke lokasi toko yang benar.', 'warn');
                     }
-                    setStatus('Alamat tidak ditemukan. Klik langsung di peta untuk menandai lokasi toko.', 'err');
                 } catch (e) {
-                    setStatus('Layanan pencarian alamat sedang tidak bisa dihubungi. Klik langsung di peta untuk menandai lokasi.', 'err');
+                    setStatus('Layanan pencarian jalan sedang tidak bisa dihubungi. Pin tetap di pusat kelurahan; geser atau klik peta untuk menandai lokasi.', 'err');
                 } finally {
                     busy = false; btn.disabled = false; btn.textContent = 'Cari Lokasi dari Alamat';
                 }
             }
 
-            btn.addEventListener('click', geocode);
+            btn.addEventListener('click', () => geocode(false));
 
-            // Otomatis: saat keluar dari kolom alamat, jika koordinat masih kosong dan belum dikoreksi manual.
-            addrEl.addEventListener('blur', () => {
-                if (!manual && latEl.value.trim() === '' && addrEl.value.trim() !== '') geocode();
-            });
-            // Alamat diubah saat koordinat sudah ada: ingatkan agar diperbarui.
-            addrEl.addEventListener('input', () => {
-                if (latEl.value.trim() !== '' && !busy) {
-                    setStatus('Alamat berubah. Klik "Cari Lokasi dari Alamat" jika posisi pin perlu diperbarui.', 'warn');
+            window.addEventListener('rs-address-change', (e) => {
+                const { source, state: st } = e.detail;
+                if (source === 'init' || !st.center) return;
+
+                if (source === 'street-blur') {
+                    if (!manual && st.parts.village && st.parts.street.trim()) geocode(true);
+                    return;
                 }
+                // Pilihan wilayah berubah: peta langsung menuju pusat wilayah terdalam.
+                if (manual) {
+                    map.setView([st.center.lat, st.center.lng], ZOOM[st.level]);
+                    setStatus('Wilayah berubah, tetapi pin manual tidak diubah. Klik "Cari Lokasi dari Alamat" bila perlu memperbarui.', 'warn');
+                    return;
+                }
+                setPoint(st.center.lat, st.center.lng, ZOOM[st.level]);
+                setStatus(st.level === 'village'
+                    ? 'Pin di pusat kelurahan/desa (perkiraan). Tulis nama jalan lalu cari lokasi untuk lebih tepat.'
+                    : 'Peta menuju wilayah terpilih. Lanjutkan sampai kelurahan/desa.', 'info');
             });
-        })();
+        });
     </script>
 @endpush
