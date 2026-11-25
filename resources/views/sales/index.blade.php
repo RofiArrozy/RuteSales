@@ -72,7 +72,7 @@
                             <td class="px-5 py-4 text-slate-700 font-semibold">
                                 @if($user->sales)
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700">
-                                        {{ $user->sales->routes->count() }} rute aktif
+                                        {{ $user->sales->routes_count }} rute aktif
                                     </span>
                                 @else
                                     <span class="text-xs text-slate-400">-</span>

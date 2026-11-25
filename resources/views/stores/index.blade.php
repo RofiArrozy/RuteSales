@@ -78,7 +78,7 @@
                                 <x-badge :status="$store->status === 'active' ? 'Aktif' : 'Non-Aktif'" />
                             </td>
                             <td class="px-5 py-4 text-slate-600 font-semibold">
-                                {{ $store->visits_count }} kali
+                                {{ $store->route_visits_count }} kali
                             </td>
                             <td class="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
                                 <a href="{{ route('stores.show', $store->id) }}" class="inline-flex px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors">

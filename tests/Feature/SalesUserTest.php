@@ -6,6 +6,7 @@ use App\Models\Sales;
 use App\Models\SalesRoute;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class SalesUserTest extends TestCase
@@ -74,5 +75,48 @@ class SalesUserTest extends TestCase
         $response->assertRedirect(route('sales.index'));
         $this->assertDatabaseHas('users', ['id' => $salesUser->id, 'is_active' => false]);
         $this->assertDatabaseHas('sales', ['id' => $salesProfile->id, 'status' => 'inactive']);
+    }
+
+    private function makeSalesWithRoutes(int $routes): void
+    {
+        $user = User::factory()->sales()->create();
+        $profile = Sales::factory()->create(['user_id' => $user->id, 'name' => $user->name]);
+        SalesRoute::factory()->count($routes)->create(['sales_id' => $profile->id]);
+    }
+
+    private function countQueriesOnIndex(): int
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->actingAs($this->admin)->get(route('sales.index'))->assertOk();
+        $count = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $count;
+    }
+
+    /**
+     * Daftar sales menampilkan jumlah rute yang benar dan tidak memicu N+1 query.
+     */
+    public function test_sales_index_shows_route_count_without_n_plus_one(): void
+    {
+        $this->makeSalesWithRoutes(3);
+        $this->makeSalesWithRoutes(1);
+
+        $this->actingAs($this->admin)->get(route('sales.index'))
+            ->assertOk()
+            ->assertSee('3 rute aktif')
+            ->assertSee('1 rute aktif');
+
+        $queriesWithFewUsers = $this->countQueriesOnIndex();
+
+        foreach (range(1, 5) as $i) {
+            $this->makeSalesWithRoutes(2);
+        }
+
+        $queriesWithManyUsers = $this->countQueriesOnIndex();
+
+        // Jumlah query harus tetap meski jumlah baris bertambah
+        $this->assertSame($queriesWithFewUsers, $queriesWithManyUsers);
     }
 }

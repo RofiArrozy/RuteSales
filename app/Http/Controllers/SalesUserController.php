@@ -15,7 +15,8 @@ class SalesUserController extends Controller
      */
     public function index(Request $request)
     {
-        $query = User::with('sales');
+        // routes_count dihitung sekali lewat withCount agar tidak terjadi N+1 query di tabel
+        $query = User::with(['sales' => fn ($q) => $q->withCount('routes')]);
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {

@@ -79,4 +79,23 @@ class StoreTest extends TestCase
         $response->assertRedirect(route('stores.index'));
         $this->assertDatabaseHas('stores', ['id' => $store->id, 'status' => 'inactive']);
     }
+
+    /**
+     * Kolom total kunjungan di daftar toko menampilkan jumlah kunjungan yang benar.
+     */
+    public function test_store_index_shows_visit_count(): void
+    {
+        $store = Store::factory()->create(['name' => 'Toko Hitung Kunjungan']);
+
+        foreach ([1, 2] as $sequence) {
+            $route = SalesRoute::factory()->create();
+            RouteVisit::create(['sales_route_id' => $route->id, 'store_id' => $store->id, 'sequence' => $sequence]);
+        }
+
+        $response = $this->actingAs($this->admin)->get(route('stores.index'));
+
+        $response->assertOk();
+        $response->assertSee('Toko Hitung Kunjungan');
+        $response->assertSee('2 kali');
+    }
 }
