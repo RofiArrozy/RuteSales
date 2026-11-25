@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -40,7 +43,19 @@ class AuthController extends Controller
 
         $remember = $request->has('remember');
 
-        if (Auth::attempt($credentials, $remember)) {
+        // Batasi percobaan login berulang (per email + IP)
+        $throttleKey = Str::lower($credentials['email']) . '|' . $request->ip();
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+
+            return back()->withErrors([
+                'email' => "Terlalu banyak percobaan login. Coba lagi dalam {$seconds} detik.",
+            ])->onlyInput('email');
+        }
+
+        // Hanya akun aktif yang boleh masuk
+        if (Auth::attempt($credentials + ['is_active' => true], $remember)) {
+            RateLimiter::clear($throttleKey);
             $request->session()->regenerate();
             $user = Auth::user();
 
@@ -48,6 +63,16 @@ class AuthController extends Controller
 
             return redirect()->intended($targetRoute)
                 ->with('success', 'Selamat datang kembali, ' . $user->name . '!');
+        }
+
+        RateLimiter::hit($throttleKey, 60);
+
+        // Kata sandi benar tetapi akun dinonaktifkan: beri pesan yang jelas
+        $existing = User::where('email', $credentials['email'])->first();
+        if ($existing && !$existing->is_active && Hash::check($credentials['password'], $existing->password)) {
+            return back()->withErrors([
+                'email' => 'Akun Anda dinonaktifkan. Hubungi admin.',
+            ])->onlyInput('email');
         }
 
         return back()->withErrors([
@@ -64,6 +89,7 @@ class AuthController extends Controller
         abort_unless(app()->environment('local'), 404);
 
         $user = User::findOrFail($id);
+        abort_unless($user->is_active, 403, 'Akun nonaktif.');
         Auth::login($user);
         request()->session()->regenerate();
 

@@ -310,6 +310,30 @@
     </div>
 </div>
 
+<script>
+// Cegah kirim ganda: kunci tombol submit pada form bertanda data-lock-submit
+document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form.matches || !form.matches('[data-lock-submit]')) return;
+    if (form.dataset.submitting === '1') { e.preventDefault(); return; }
+    form.dataset.submitting = '1';
+    setTimeout(function () {
+        form.querySelectorAll('button[type="submit"]:not([data-locked])').forEach(function (b) {
+            b.disabled = true; b.classList.add('opacity-60', 'cursor-wait');
+        });
+    }, 0);
+});
+// Tombol dipulihkan saat halaman dimuat ulang dari cache (tombol Back)
+window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    document.querySelectorAll('form[data-lock-submit]').forEach(function (f) {
+        delete f.dataset.submitting;
+        f.querySelectorAll('button[type="submit"]:not([data-locked])').forEach(function (b) {
+            b.disabled = false; b.classList.remove('opacity-60', 'cursor-wait');
+        });
+    });
+});
+</script>
 @stack('scripts')
 </body>
 </html>

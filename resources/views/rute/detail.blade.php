@@ -143,7 +143,7 @@
 
                     <!-- Formulir Check-in Inline Terproteksi CSRF & Server-Time -->
                     <div x-show="showCheckinForm" x-cloak class="mt-5 pt-4 border-t border-slate-200/80 bg-slate-50/80 -mx-5 -mb-5 p-5 rounded-b-2xl">
-                        <form action="{{ route('rute.checkin', $visitItem->id) }}" method="POST" enctype="multipart/form-data" x-data="{ checkinResult: '{{ $visitItem->result ?? 'successful' }}' }">
+                        <form action="{{ route('rute.checkin', $visitItem->id) }}" method="POST" enctype="multipart/form-data" data-lock-submit x-data="{ checkinResult: '{{ $visitItem->result ?? 'successful' }}' }">
                             @csrf
                             <h4 class="text-sm font-bold text-slate-800 mb-3">Formulir Check-in Lapangan (Waktu Server Otomatis)</h4>
 

@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class RouteVisitController extends Controller
 {
@@ -129,8 +130,11 @@ class RouteVisitController extends Controller
             $rules['failure_reason'] = ['required', 'string', 'min:3', 'max:500'];
         } else {
             // Jika berhasil dan membuat pesanan, nominal harus valid dan >= 0 (TC-19)
-            $rules['total_amount'] = ['nullable', 'numeric', 'min:0'];
-            $rules['order_number'] = ['nullable', 'string', 'max:100'];
+            $rules['total_amount'] = ['nullable', 'numeric', 'min:0', 'max:9999999999999'];
+            $rules['order_number'] = [
+                'nullable', 'string', 'max:100',
+                Rule::unique('orders', 'order_number')->ignore($visit->order?->id),
+            ];
         }
 
         if ($requiresSkipReason) {
@@ -146,6 +150,8 @@ class RouteVisitController extends Controller
             'failure_reason.min' => 'Alasan minimal 3 karakter.',
             'total_amount.numeric' => 'Nilai pesanan harus berupa angka yang valid.',
             'total_amount.min' => 'Nilai pesanan tidak boleh bernilai negatif.',
+            'total_amount.max' => 'Nilai pesanan terlalu besar.',
+            'order_number.unique' => 'Nomor pesanan sudah dipakai kunjungan lain.',
             'photos.max' => 'Maksimal 3 foto bukti per kunjungan.',
             'photos.*.image' => 'Bukti harus berupa file gambar.',
             'photos.*.mimes' => 'Foto harus berformat JPG, PNG, atau WebP.',
@@ -228,7 +234,7 @@ class RouteVisitController extends Controller
             if ($validated['result'] === 'successful') {
                 $amount = (float) $request->input('total_amount', 0);
                 if ($amount >= 0) {
-                    $orderNumber = $request->input('order_number') ?: ('ORD-' . date('Ymd') . '-' . sprintf('%04d', $visit->id));
+                    $orderNumber = $request->input('order_number') ?: ($visit->order?->order_number ?? 'ORD-' . date('Ymd') . '-' . sprintf('%04d', $visit->id));
                     Order::updateOrCreate(
                         ['route_visit_id' => $visit->id],
                         [

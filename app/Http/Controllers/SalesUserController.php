@@ -109,6 +109,23 @@ class SalesUserController extends Controller
 
         $data['is_active'] = $request->has('is_active') ? true : false;
 
+        // Pengaman: admin tidak boleh menurunkan/menonaktifkan akunnya sendiri
+        if (auth()->id() === $user->id) {
+            if (!$data['is_active']) {
+                return back()->withInput()->with('error', 'Anda tidak dapat menonaktifkan akun yang sedang Anda gunakan.');
+            }
+            if ($data['role'] !== $user->role) {
+                return back()->withInput()->with('error', 'Anda tidak dapat mengubah peran akun yang sedang Anda gunakan.');
+            }
+        }
+
+        // Pengaman: harus selalu ada minimal satu admin aktif
+        $losesAdmin = $user->role === 'admin' && $user->is_active
+            && ($data['role'] !== 'admin' || !$data['is_active']);
+        if ($losesAdmin && !$this->hasOtherActiveAdmin($user)) {
+            return back()->withInput()->with('error', 'Tidak dapat dilakukan: sistem harus memiliki minimal satu admin aktif.');
+        }
+
         $user->update($data);
 
         // Sinkronkan data ke profil sales jika ada
@@ -138,6 +155,11 @@ class SalesUserController extends Controller
                 ->with('error', 'Anda tidak dapat menghapus akun yang sedang Anda gunakan.');
         }
 
+        if ($user->role === 'admin' && $user->is_active && !$this->hasOtherActiveAdmin($user)) {
+            return redirect()->route('sales.index')
+                ->with('error', 'Tidak dapat menghapus admin aktif terakhir.');
+        }
+
         $name = $user->name;
 
         // Jika memiliki profil sales yang sudah memiliki riwayat rute, nonaktifkan
@@ -156,5 +178,16 @@ class SalesUserController extends Controller
 
         return redirect()->route('sales.index')
             ->with('success', "Pengguna '{$name}' berhasil dihapus dari sistem.");
+    }
+
+    /**
+     * Apakah masih ada admin aktif lain selain pengguna ini?
+     */
+    private function hasOtherActiveAdmin(User $user): bool
+    {
+        return User::where('role', 'admin')
+            ->where('is_active', true)
+            ->where('id', '!=', $user->id)
+            ->exists();
     }
 }

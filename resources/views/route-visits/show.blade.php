@@ -79,7 +79,7 @@
                 </div>
             </div>
 
-            <form action="{{ route('my-visits.checkin', $visit->id) }}" method="POST" enctype="multipart/form-data" x-data="{
+            <form action="{{ route('my-visits.checkin', $visit->id) }}" method="POST" enctype="multipart/form-data" data-lock-submit x-data="{
                 result: '{{ old('result', $visit->result ?? 'successful') }}',
                 orderAmount: '{{ old('total_amount', $visit->order->total_amount ?? '') }}'
             }">

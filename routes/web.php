@@ -34,7 +34,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::get('/quick-login/{id}', [AuthController::class, 'quickLogin'])->name('quick.login');
 
 // Group Route yang Terproteksi Autentikasi
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'active'])->group(function () {
 
     // ==========================================
     // AREA KHUSUS ADMIN (Role: Admin)

@@ -187,6 +187,15 @@ class SalesRouteController extends Controller
     {
         $route = SalesRoute::findOrFail($id);
         $name = $route->name;
+
+        // Rute yang sudah punya check-in adalah data historis: jangan dihapus, cukup dibatalkan
+        if ($route->visits()->whereNotNull('checked_in_at')->exists()) {
+            $route->update(['status' => 'cancelled']);
+
+            return redirect()->route('rute.index')
+                ->with('success', "Rute '{$name}' sudah memiliki check-in sehingga tidak dihapus, statusnya diubah menjadi Dibatalkan.");
+        }
+
         $route->delete();
 
         return redirect()->route('rute.index')
